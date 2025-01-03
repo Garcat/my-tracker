@@ -2,7 +2,6 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import ResultList from './resultList';
-
 const App: React.FC = () => {
 	const [texts, setTexts] = useState<string[]>([]);
 	const [responses, setResponses] = useState<unknown[]>([]);
@@ -12,7 +11,6 @@ const App: React.FC = () => {
 
 	const cors_api_host = 'cors-anywhere.herokuapp.com';
 	const cors_api_url = 'https://' + cors_api_host + '/';
-	const backup_cors_api_url = 'https://cors-proxy.htmldriven.com/?url=';
 	const endpoint = cors_api_url + 'http://sys-new-api.auodexpress.com/api/tms/userSys/client/getRouterList';
 					
 	useEffect(() => {
@@ -50,8 +48,8 @@ const App: React.FC = () => {
 				setCount(prev => prev - 1);
 				setLoading(false);
 			}					
-		} catch (error) {
-			setError(error.message);
+		} catch (error: unknown) {
+			setError( (error instanceof Error) ? error.message : 'Unknown errors' ); 
 		}
 	};
 	
