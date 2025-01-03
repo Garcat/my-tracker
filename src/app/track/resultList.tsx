@@ -1,7 +1,14 @@
 
 interface Props {
     trackNo: string[];
-    results: string[];
+    results: {
+            data: {
+                hisList: {
+                    toStatus: string;
+                    createDate: string;
+                }[]
+            }
+        }[];    
 }
 
 const ResultList = ({trackNo, results}: Props) => {
