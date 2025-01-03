@@ -4,15 +4,19 @@ import axios from 'axios';
 import ResultList from './resultList';
 const App: React.FC = () => {
 	const [texts, setTexts] = useState<string[]>([]);
-	const [responses, setResponses] = useState<unknown[]>([]);
+	// const [responses, setResponses] = useState<unknown[]>([]);
+	const [responses, setResponses] = useState<
+		{ data: { hisList: { toStatus: string; createDate: string }[] } }[]
+	>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [count, setCount] = useState(0);
 
 	const cors_api_host = 'cors-anywhere.herokuapp.com';
 	const cors_api_url = 'https://' + cors_api_host + '/';
-	const endpoint = cors_api_url + 'http://sys-new-api.auodexpress.com/api/tms/userSys/client/getRouterList';
-					
+	const endpoint =
+		cors_api_url + 'http://sys-new-api.auodexpress.com/api/tms/userSys/client/getRouterList';
+
 	useEffect(() => {
 		const storedPreviousInputs = localStorage.getItem('previousInputs');
 		if (storedPreviousInputs) {
@@ -27,32 +31,28 @@ const App: React.FC = () => {
 		localStorage.setItem('previousInputs', JSON.stringify(lines));
 	};
 
-	const fetchData = async () => {		
+	const fetchData = async () => {
 		try {
 			const tmpList = [];
 			setCount(texts.length);
 			for (const text of texts) {
 				const payload = { wayBillCode: text };
-				const response = await axios.post(
-					endpoint,
-					payload,
-					{
-						headers: {
-							Accept: '/',
-							'Content-Type': 'application/json'
-						}
+				const response = await axios.post(endpoint, payload, {
+					headers: {
+						Accept: '/',
+						'Content-Type': 'application/json'
 					}
-				);
+				});
 				tmpList.push(response.data);
 				setResponses(tmpList);
 				setCount(prev => prev - 1);
 				setLoading(false);
-			}					
+			}
 		} catch (error: unknown) {
-			setError( (error instanceof Error) ? error.message : 'Unknown errors' ); 
+			setError(error instanceof Error ? error.message : 'Unknown errors');
 		}
 	};
-	
+
 	const handleSubmit = () => {
 		setLoading(true);
 		fetchData();
@@ -60,11 +60,7 @@ const App: React.FC = () => {
 
 	return (
 		<div className="flex flex-col">
-			<iframe
-				src="https://cors-anywhere.herokuapp.com/corsdemo"
-				width="100%"
-				height="120"
-			/>
+			<iframe src="https://cors-anywhere.herokuapp.com/corsdemo" width="100%" height="120" />
 			<div className="flex">
 				<div className="flex flex-col w-40 m-4">
 					<h2>Track No.:</h2>
@@ -85,11 +81,12 @@ const App: React.FC = () => {
 					{error ? <p className="text-red-500">Error: {error}</p> : null}
 				</div>
 				<div className="flex flex-col w-160 m-4">
-					<h2>Status:  {count} updates left</h2>
-					{ loading 
-						? <p>Loading...</p> 
-						: <ResultList trackNo={texts} results={responses as string[]} /> 
-					}
+					<h2>Status: {count} updates left</h2>
+					{loading ? (
+						<p>Loading...</p>
+					) : (
+						<ResultList trackNo={texts} results={responses} />
+					)}
 				</div>
 			</div>
 		</div>
