@@ -4,7 +4,6 @@ import axios from 'axios';
 import ResultList from './resultList';
 const App: React.FC = () => {
 	const [texts, setTexts] = useState<string[]>([]);
-	// const [responses, setResponses] = useState<unknown[]>([]);
 	const [responses, setResponses] = useState<
 		{ data: { hisList: { toStatus: string; createDate: string }[] } }[]
 	>([]);
@@ -47,6 +46,7 @@ const App: React.FC = () => {
 				setResponses(tmpList);
 				setCount(prev => prev - 1);
 				setLoading(false);
+				setError(null);
 			}
 		} catch (error: unknown) {
 			setError(error instanceof Error ? error.message : 'Unknown errors');
@@ -67,7 +67,7 @@ const App: React.FC = () => {
 					<textarea
 						value={texts.join('\n')}
 						onChange={handleTextChange}
-						rows={16}
+						rows={20}
 						cols={20}
 						placeholder="Enter multiple lines of text..."
 						className="border border-gray-300 rounded p-2"
