@@ -26,8 +26,24 @@ const App: React.FC = () => {
 	const handleTextChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
 		const text = event.target.value;
 		const lines = text.split('\n');
+		const previousLines = texts;
+		
 		setTexts(lines);
 		localStorage.setItem('previousInputs', JSON.stringify(lines));
+		
+		// Sync responses with texts array using reduce - maintain correspondence between trackNo and results
+		setResponses(prevResponses => {
+			return lines.reduce((newResponses, currentLine) => {
+				const previousIndex = previousLines.indexOf(currentLine);
+				
+				// If this line existed in the previous input and we have a result for it
+				if (previousIndex !== -1 && previousIndex < prevResponses.length) {
+					newResponses.push(prevResponses[previousIndex]);
+				}
+				
+				return newResponses;
+			}, [] as typeof prevResponses);
+		});
 	};
 
 	const fetchData = async () => {
@@ -79,7 +95,7 @@ const App: React.FC = () => {
 						Submit
 					</button>
 					{error ? <p className="text-red-500">Error: {error}</p> : null}
-					<p>v1.05</p>
+					<p>v9.25</p>
 				</div>
 				<div className="flex flex-col w-160 m-4">
 					<h2>Status: {count} updates left</h2>
