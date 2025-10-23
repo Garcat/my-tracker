@@ -6,7 +6,10 @@ interface Props {
                 hisList: {
                     toStatus: string;
                     createDate: string;
-                }[]
+                }[],
+                wbInfo: {
+                    expressCode: string;
+                }
             }
         }[];    
 }
@@ -14,24 +17,42 @@ interface Props {
 const ResultList = ({trackNo, results}: Props) => {
     console.log(results);
     return (
-        <ul>
+        <div className="space-y-3">
             {results.map((result, index) => {
                 // Only display if we have a valid result and corresponding trackNo
                 if (result && result.data && result.data.hisList && result.data.hisList.length > 0 && index < trackNo.length) {
-                    const status = JSON.stringify(result.data.hisList[0].toStatus);
+                    let status = JSON.stringify(result.data.hisList[0].toStatus);
                     const createDate = JSON.stringify(result.data.hisList[0].createDate);
                     const isInTransfer = status.includes('您的快件');
                     const isDelivered = status.includes('已投递');
+                    if (isDelivered || isInTransfer) {
+                        status = status + ' / ' + JSON.stringify(result.data.wbInfo.expressCode);
+                    }
                     return (
-                        <li className={`border border-gray-300 rounded p-2 m-2 
-                             ${isDelivered ? 'text-red-500' : isInTransfer ? 'text-amber-600' : ''}`} key={index}>
-                            {`${trackNo[index]}:   ${status} / ${createDate}`}
-                        </li>
+                        <div 
+                            className={`p-4 rounded-lg border bg-card text-card-foreground shadow-sm
+                                ${isDelivered ? 'border-destructive/50 bg-destructive/5' : 
+                                  isInTransfer ? 'border-amber-500/50 bg-amber-50/50' : 
+                                  'border-border'}`} 
+                            key={index}
+                        >
+                            <div className="flex flex-col space-y-1">
+                                <div className="font-medium text-sm text-muted-foreground">
+                                    {trackNo[index]}
+                                </div>
+                                <div className={`text-sm ${isDelivered ? 'text-destructive' : isInTransfer ? 'text-amber-600' : 'text-foreground'}`}>
+                                    {status.replace(/"/g, '')}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                    {createDate.replace(/"/g, '')}
+                                </div>
+                            </div>
+                        </div>
                     );
                 }
                 return null;
             })}
-        </ul>
+        </div>
     )
 }
 
