@@ -116,7 +116,7 @@ const App: React.FC = () => {
 									<p className="text-destructive text-sm">Error: {error}</p>
 								</div>
 							)}
-							<p className="text-center text-sm text-muted-foreground">v10.23.18</p>
+							<p className="text-center text-sm text-muted-foreground">v10.23.19</p>
 						</CardContent>
 					</Card>
 					
