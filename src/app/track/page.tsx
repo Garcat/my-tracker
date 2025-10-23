@@ -4,6 +4,7 @@ import axios from 'axios';
 import ResultList from './resultList';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loader2 } from 'lucide-react';
 const App: React.FC = () => {
 	const [texts, setTexts] = useState<string[]>([]);
 	const [responses, setResponses] = useState<
@@ -11,7 +12,9 @@ const App: React.FC = () => {
 			{ 
 				hisList: { toStatus: string; createDate: string }[],
 				wbInfo: {expressCode: string}
-			}
+			},
+			msg: string,
+			result: boolean
 		}[]
 	>([]);
 	const [error, setError] = useState<string | null>(null);
@@ -106,7 +109,7 @@ const App: React.FC = () => {
 								disabled={loading}
 								className="w-full bg-blue-600 hover:bg-blue-700 text-white"
 							>
-								{loading ? 'Loading...' : 'Submit'}
+								{loading ? (<span className="inline-flex items-center"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Fetching...</span>) : 'Submit'}
 							</Button>
 							{error && (
 								<div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
@@ -121,7 +124,11 @@ const App: React.FC = () => {
 						<CardHeader>
 							<CardTitle>Tracking Results</CardTitle>
 							<CardDescription>
-								{count > 0 ? `${count} updates left` : `${texts.length} records updated.`}
+								{(loading || count > 0) ? (
+									<span className="inline-flex items-center">
+										<Loader2 className="mr-2 h-4 w-4 animate-spin" /> {count > 0 ? `${count} updates left` : 'Updating...'}
+									</span>
+								) : `${texts.length} records updated.`}
 							</CardDescription>
 						</CardHeader>
 						<CardContent>

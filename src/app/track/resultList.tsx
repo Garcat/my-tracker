@@ -10,7 +10,9 @@ interface Props {
                 wbInfo: {
                     expressCode: string;
                 }
-            }
+            },
+            msg: string,
+            result: boolean
         }[];    
 }
 
@@ -47,6 +49,12 @@ const ResultList = ({trackNo, results}: Props) => {
                                     {createDate.replace(/"/g, '')}
                                 </div>
                             </div>
+                        </div>
+                    );
+                } else if (result && result.result === false) {
+                    return (
+                        <div className="p-4 rounded-lg border bg-card text-card-foreground shadow-sm border-gray-300" key={index}>
+                            <div className="font-medium text-sm text-gray-300">{result.msg}</div>
                         </div>
                     );
                 }
