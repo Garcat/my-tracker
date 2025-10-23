@@ -95,7 +95,7 @@ const App: React.FC = () => {
 						Submit
 					</button>
 					{error ? <p className="text-red-500">Error: {error}</p> : null}
-					<p>v10.22</p>
+					<p>v10.23</p>
 				</div>
 				<div className="flex flex-col w-160 m-4">
 					<h2>Status: {count > 0 ? `${count} updates left` : `${texts.length} records updated.`}</h2>
