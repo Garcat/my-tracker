@@ -109,7 +109,7 @@ const App: React.FC = () => {
 								disabled={loading}
 								className="w-full bg-blue-600 hover:bg-blue-700 text-white"
 							>
-								{loading ? (<span className="inline-flex items-center"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Fetching...</span>) : 'Submit'}
+								{loading || count > 0 ? (<span className="inline-flex items-center"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Fetching...</span>) : 'Submit'}
 							</Button>
 							{error && (
 								<div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
