@@ -12,6 +12,7 @@ interface Props {
 }
 
 const ResultList = ({trackNo, results}: Props) => {
+    console.log(results);
     return (
         <ul>
             {results.map((result, index) => {
@@ -19,8 +20,11 @@ const ResultList = ({trackNo, results}: Props) => {
                 if (result && result.data && result.data.hisList && result.data.hisList.length > 0 && index < trackNo.length) {
                     const status = JSON.stringify(result.data.hisList[0].toStatus);
                     const createDate = JSON.stringify(result.data.hisList[0].createDate);
+                    const isInTransfer = status.includes('您的快件');
+                    const isDelivered = status.includes('已投递');
                     return (
-                        <li className="border border-gray-300 rounded p-2 m-2" key={index}>
+                        <li className={`border border-gray-300 rounded p-2 m-2 
+                             ${isDelivered ? 'text-red-500' : isInTransfer ? 'text-amber-600' : ''}`} key={index}>
                             {`${trackNo[index]}:   ${status} / ${createDate}`}
                         </li>
                     );

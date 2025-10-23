@@ -98,7 +98,7 @@ const App: React.FC = () => {
 					<p>v10.22</p>
 				</div>
 				<div className="flex flex-col w-160 m-4">
-					<h2>Status: {count} updates left</h2>
+					<h2>Status: {count > 0 ? `${count} updates left` : `${texts.length} records updated.`}</h2>
 					{loading ? (
 						<p>Loading...</p>
 					) : (
