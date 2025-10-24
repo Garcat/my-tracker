@@ -23,12 +23,13 @@ const ResultList = ({trackNo, results}: Props) => {
             {results.map((result, index) => {
                 // Only display if we have a valid result and corresponding trackNo
                 if (result && result.data && result.data.hisList && result.data.hisList.length > 0 && index < trackNo.length) {
-                    let status = JSON.stringify(result.data.hisList[0].toStatus);
+                    const status = JSON.stringify(result.data.hisList[0].toStatus);
                     const createDate = JSON.stringify(result.data.hisList[0].createDate);
                     const isInTransfer = status.includes('您的快件');
-                    const isDelivered = status.includes('已投递');
+                    const isDelivered = status.includes('感谢使用');
+                    let itemTitle = trackNo[index] + ' / ' + createDate.replace(/"/g, '');
                     if (isDelivered || isInTransfer) {
-                        status = status + ' / ' + JSON.stringify(result.data.wbInfo.expressCode);
+                        itemTitle = itemTitle + ' / ' + JSON.stringify(result.data.wbInfo.expressCode);
                     }
                     return (
                         <div 
@@ -39,14 +40,11 @@ const ResultList = ({trackNo, results}: Props) => {
                             key={index}
                         >
                             <div className="flex flex-col space-y-1">
-                                <div className="font-medium text-sm text-muted-foreground">
-                                    {trackNo[index]}
+                                <div className="font-medium text-md text-muted-foreground">
+                                    {itemTitle}
                                 </div>
                                 <div className={`text-sm ${isDelivered ? 'text-destructive' : isInTransfer ? 'text-amber-600' : 'text-foreground'}`}>
                                     {status.replace(/"/g, '')}
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                    {createDate.replace(/"/g, '')}
                                 </div>
                             </div>
                         </div>
