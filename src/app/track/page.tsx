@@ -142,7 +142,7 @@ const App: React.FC = () => {
 									<p className="text-destructive text-sm">Error: {error}</p>
 								</div>
 							)}
-							<p className="text-center text-sm text-muted-foreground">v10.28.13</p>
+							<p className="text-center text-sm text-muted-foreground">v10.28.14</p>
 						</CardContent>
 					</Card>
 					
@@ -158,7 +158,7 @@ const App: React.FC = () => {
 							</CardDescription>
 						</CardHeader>
 						<CardContent>
-							{!hasFirstData ? (
+							{!hasFirstData && loading ? (
 								<div className="flex items-center justify-center py-8">
 									<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
 									<span className="ml-2">Loading...</span>
