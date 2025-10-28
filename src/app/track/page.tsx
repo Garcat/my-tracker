@@ -19,6 +19,7 @@ const App: React.FC = () => {
 	>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
+	const [hasFirstData, setHasFirstData] = useState(false);
 	const [count, setCount] = useState(0);
 
 	const cors_api_host = 'cors-anywhere.herokuapp.com';
@@ -59,8 +60,29 @@ const App: React.FC = () => {
 	const fetchData = async () => {
 		try {
 			const tmpList = [];
-			setCount(texts.length);
-			for (const text of texts) {
+			let pendingCount = texts.length;
+			
+			// First pass: check which track numbers are already delivered
+			for (let i = 0; i < texts.length; i++) {
+				const text = texts[i];
+				const existingResult = responses[i];
+				
+				// Check if this track number has a delivered result
+				if (existingResult && existingResult.data && existingResult.data.hisList && existingResult.data.hisList.length > 0) {
+					const status = JSON.stringify(existingResult.data.hisList[0].toStatus);
+					const isDelivered = status.includes('感谢使用');
+					
+					if (isDelivered) {
+						// Keep the existing delivered result
+						tmpList.push(existingResult);
+						pendingCount--;
+						setCount(pendingCount);
+						setResponses([...tmpList]);
+						continue;
+					}
+				}
+				
+				// Fetch data for non-delivered or new track numbers
 				const payload = { wayBillCode: text };
 				const response = await axios.post(endpoint, payload, {
 					headers: {
@@ -69,18 +91,22 @@ const App: React.FC = () => {
 					}
 				});
 				tmpList.push(response.data);
+				pendingCount--;
 				setResponses(tmpList);
-				setCount(prev => prev - 1);
-				setLoading(false);
-				setError(null);
+				setCount(pendingCount);
+				setError(null);				
+				setHasFirstData(true);
 			}
 		} catch (error: unknown) {
 			setError(error instanceof Error ? error.message : 'Unknown errors');
+		} finally {
+			setLoading(false);
 		}
 	};
 
 	const handleSubmit = () => {
 		setLoading(true);
+		setHasFirstData(false);
 		fetchData();
 	};
 
@@ -109,14 +135,14 @@ const App: React.FC = () => {
 								disabled={loading}
 								className="w-full bg-blue-600 hover:bg-blue-700 text-white"
 							>
-								{loading || count > 0 ? (<span className="inline-flex items-center"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Fetching...</span>) : 'Submit'}
+								{loading ? (<span className="inline-flex items-center"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Fetching...</span>) : 'Submit'}
 							</Button>
 							{error && (
 								<div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
 									<p className="text-destructive text-sm">Error: {error}</p>
 								</div>
 							)}
-							<p className="text-center text-sm text-muted-foreground">v10.25.10</p>
+							<p className="text-center text-sm text-muted-foreground">v10.28.13</p>
 						</CardContent>
 					</Card>
 					
@@ -124,7 +150,7 @@ const App: React.FC = () => {
 						<CardHeader>
 							<CardTitle>Tracking Results</CardTitle>
 							<CardDescription>
-								{(loading || count > 0) ? (
+								{loading ? (
 									<span className="inline-flex items-center">
 										<Loader2 className="mr-2 h-4 w-4 animate-spin" /> {count > 0 ? `${count} updates left` : 'Updating...'}
 									</span>
@@ -132,7 +158,7 @@ const App: React.FC = () => {
 							</CardDescription>
 						</CardHeader>
 						<CardContent>
-							{loading ? (
+							{!hasFirstData ? (
 								<div className="flex items-center justify-center py-8">
 									<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
 									<span className="ml-2">Loading...</span>
