@@ -25,7 +25,7 @@ const ResultList = ({trackNo, results}: Props) => {
                 if (result && result.data && result.data.hisList && result.data.hisList.length > 0 && index < trackNo.length) {
                     const status = JSON.stringify(result.data.hisList[0].toStatus);
                     const createDate = JSON.stringify(result.data.hisList[0].createDate);
-                    const isInTransfer = status.includes('您的快件');
+                    const isInTransfer = status.includes('您的快件') || status.includes('正在派件');
                     const isDelivered = status.includes('感谢使用');
                     let itemTitle = trackNo[index] + ' / ' + createDate.replace(/"/g, '');
                     if (isDelivered || isInTransfer) {
