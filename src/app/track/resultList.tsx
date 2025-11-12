@@ -39,7 +39,7 @@ const ResultList = ({trackNo, results}: Props) => {
                                   'border-border'}`} 
                             key={index}
                         >
-                            <div className="flex flex-col space-y-1">
+                            <div className={`flex ${isDelivered || isInTransfer ? 'flex-col' : 'flex-row items-baseline space-x-2'} space-y-1`}>
                                 <div className="font-medium text-md text-muted-foreground">
                                     {itemTitle}
                                 </div>
