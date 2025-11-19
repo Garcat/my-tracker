@@ -142,7 +142,7 @@ const App: React.FC = () => {
 									<p className="text-destructive text-sm">Error: {error}</p>
 								</div>
 							)}
-							<p className="text-center text-sm text-muted-foreground">v11.13.10</p>
+							<p className="text-center text-sm text-muted-foreground">v11.19.17</p>
 						</CardContent>
 					</Card>
 					
