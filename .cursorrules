@@ -1,0 +1,408 @@
+# My Tracker - Cursor Rules
+
+## Project Overview
+
+My Tracker is a web application for tracking multiple shipping/tracking numbers simultaneously. Built with Next.js 15.1.2 (App Router), React 19, TypeScript 5, and Tailwind CSS.
+
+### Core Features
+- Multi-line tracking number input
+- Batch API query processing with progress tracking
+- Smart caching (skips already-delivered packages)
+- Real-time status updates with visual classification
+- Auto-save to localStorage (Supabase migration planned)
+- Status classification: Delivered (red), In Transit (yellow), Other (default)
+- Express code display for delivered and in-transit items
+
+### Technology Stack
+- **Framework**: Next.js 15.1.2 (App Router)
+- **Language**: TypeScript 5 (strict mode)
+- **UI Library**: React 19.0.0
+- **Styling**: Tailwind CSS 3.4.1 with CSS variables
+- **UI Components**: shadcn/ui (Radix UI + Tailwind CSS)
+- **Icons**: Lucide React
+- **HTTP Client**: Axios 1.7.9
+- **Testing**: Jest + React Testing Library
+- **Storage**: localStorage (current), Supabase (planned)
+
+## Code Style & Conventions
+
+### TypeScript
+- Use strict mode (enabled in tsconfig.json)
+- Always define explicit types for function parameters and return values
+- Use interfaces for object types, especially for component props
+- Prefer type inference for simple cases, explicit types for complex cases
+- Use `type` for unions/intersections, `interface` for object shapes
+
+### File Naming
+- Components: PascalCase (e.g., `ResultList.tsx`, `Button.tsx`)
+- Utilities: camelCase (e.g., `utils.ts`)
+- Pages: lowercase with hyphens for routes (Next.js App Router convention)
+- Test files: `*.test.tsx` or `*.test.ts` in `__tests__` directories
+- Configuration files: kebab-case (e.g., `tailwind.config.ts`)
+
+### Component Structure
+- Use functional components with hooks
+- Use `'use client'` directive for client components
+- Place client components in `src/app/` or `src/components/`
+- Server components (default) don't need the directive
+- Export default for page components, named exports for reusable components
+
+### Import Order
+1. React and Next.js imports
+2. Third-party libraries
+3. Internal components (using `@/` alias)
+4. Utilities and types
+5. Relative imports
+6. Styles (if any)
+
+Example:
+```typescript
+'use client';
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import ResultList from './resultList';
+```
+
+### Indentation & Formatting
+- Use tabs for indentation (as observed in existing code)
+- Use semicolons
+- Use single quotes for strings (or double quotes, be consistent)
+- Use trailing commas in multi-line objects/arrays
+- Maximum line length: 100 characters (soft limit)
+
+### Path Aliases
+- Always use `@/*` alias for imports from `src/` directory
+- Example: `import { Button } from '@/components/ui/button'`
+- Never use relative paths like `../../components/ui/button`
+
+## Architecture & File Organization
+
+### Next.js App Router Structure
+```
+src/
+├── app/                    # Next.js App Router pages
+│   ├── layout.tsx         # Root layout (server component)
+│   ├── page.tsx           # Home page
+│   ├── globals.css        # Global styles
+│   └── track/             # Route: /track
+│       ├── page.tsx       # Main tracking page (client component)
+│       ├── resultList.tsx # Results display component
+│       └── __tests__/     # Test files
+├── components/             # Reusable React components
+│   └── ui/                # shadcn/ui components
+└── lib/                   # Utility functions
+    └── utils.ts           # Helper functions (cn, etc.)
+```
+
+### Component Organization
+- Page components in `src/app/[route]/page.tsx`
+- Reusable components in `src/components/`
+- UI components (shadcn/ui) in `src/components/ui/`
+- Keep components small and focused (single responsibility)
+- Extract complex logic into custom hooks or utility functions
+
+### Test File Organization
+- Place test files in `__tests__/` directories alongside source files
+- Test file naming: `[ComponentName].test.tsx` or `[function].test.ts`
+- Example: `src/app/track/__tests__/resultList.test.tsx`
+
+### State Management
+- Use React useState hooks for local component state
+- Use useEffect for side effects (API calls, localStorage)
+- Keep state as close to where it's used as possible
+- For complex state, consider useReducer or custom hooks
+- Current: localStorage for persistence (key: `previousInputs`)
+- Future: Supabase for cloud storage
+
+## UI Components & Styling
+
+### shadcn/ui Components
+- Use shadcn/ui components from `src/components/ui/`
+- Components are already configured in `components.json`
+- Add new shadcn/ui components using: `npx shadcn@latest add [component]`
+- Always use the `cn()` utility from `@/lib/utils` for className merging
+- Example: `className={cn("base-classes", conditionalClasses, props.className)}`
+
+### Tailwind CSS
+- Use Tailwind utility classes, not custom CSS
+- Use CSS variables for theming (defined in `globals.css`)
+- Color tokens: `bg-primary`, `text-foreground`, `border-border`, etc.
+- Use opacity modifiers: `bg-destructive/50`, `border-amber-500/50`
+- Responsive design: Use `sm:`, `md:`, `lg:` breakpoints
+- Use semantic color names from theme (primary, secondary, destructive, muted, accent)
+
+### Component Styling Patterns
+```typescript
+// Good: Using cn() utility and Tailwind classes
+<div className={cn(
+  "base-classes",
+  isActive && "active-classes",
+  className
+)}>
+
+// Good: Conditional styling with template literals
+className={`p-4 rounded-lg border ${
+  isDelivered ? 'border-destructive/50 bg-destructive/5' : 
+  isInTransfer ? 'border-amber-500/50 bg-amber-50/50' : 
+  'border-border'
+}`}
+```
+
+### Status Classification Colors
+- **Delivered** (已送达): `border-destructive/50 bg-destructive/5 text-destructive`
+- **In Transit** (运输中): `border-amber-500/50 bg-amber-50/50 text-amber-600`
+- **Other**: Default `border-border` styling
+
+### Responsive Design
+- Mobile-first approach
+- Use Tailwind responsive prefixes: `sm:`, `md:`, `lg:`, `xl:`
+- Test on multiple screen sizes
+- Current: Desktop and tablet optimized, mobile optimization pending
+
+### Accessibility
+- Use semantic HTML elements
+- Add proper ARIA labels when needed
+- Ensure keyboard navigation works
+- Maintain proper color contrast
+- Use shadcn/ui components (they include accessibility features)
+
+## API Integration
+
+### API Endpoint
+- **Base URL**: `http://sys-new-api.auodexpress.com`
+- **Endpoint**: `/api/tms/userSys/client/getRouterList`
+- **Method**: POST
+- **CORS Proxy**: `https://cors-anywhere.herokuapp.com/` (requires activation)
+
+### API Call Pattern
+```typescript
+const endpoint = cors_api_url + 'http://sys-new-api.auodexpress.com/api/tms/userSys/client/getRouterList';
+
+const response = await axios.post(endpoint, { wayBillCode: trackingNumber }, {
+  headers: {
+    Accept: '/',
+    'Content-Type': 'application/json'
+  }
+});
+```
+
+### Response Type Definition
+```typescript
+interface ApiResponse {
+  data: {
+    hisList: Array<{
+      toStatus: string;
+      createDate: string;
+    }>;
+    wbInfo: {
+      expressCode: string;
+    };
+  };
+  msg: string;
+  result: boolean;
+}
+```
+
+### Error Handling
+- Always wrap API calls in try-catch blocks
+- Display user-friendly error messages
+- Handle network errors gracefully
+- Show API error messages when `result.result === false`
+- Allow users to retry failed operations
+
+### Smart Caching Logic
+- Before making API call, check if tracking number already has delivered status
+- Delivered items (status contains "感谢使用") should skip API queries
+- Preserve existing results for delivered items
+- Update progress counter accurately
+
+### CORS Proxy
+- Current: Uses cors-anywhere.herokuapp.com
+- Requires manual activation on first use (iframe in app)
+- Future: Consider Next.js API route proxy or self-hosted proxy
+
+## State Management Patterns
+
+### useState Patterns
+```typescript
+// Array state
+const [texts, setTexts] = useState<string[]>([]);
+
+// Complex object state
+const [responses, setResponses] = useState<ApiResponse[]>([]);
+
+// Simple state
+const [loading, setLoading] = useState(false);
+const [error, setError] = useState<string | null>(null);
+```
+
+### State Synchronization
+- When inputs change, sync responses array to maintain index alignment
+- Use functional updates: `setState(prev => newValue)`
+- Preserve existing results when possible (smart caching)
+
+### localStorage Usage
+- Key: `previousInputs`
+- Format: JSON array of strings
+- Save on input change: `localStorage.setItem('previousInputs', JSON.stringify(lines))`
+- Load on mount: `useEffect(() => { /* load from localStorage */ }, [])`
+
+## Testing Standards
+
+### Test File Location
+- Place tests in `__tests__/` directories next to source files
+- Example: `src/app/track/__tests__/resultList.test.tsx`
+
+### Test Structure
+```typescript
+import { render, screen } from '@testing-library/react';
+import '@testing-library/jest-dom';
+import Component from '../Component';
+
+describe('Component', () => {
+  it('renders correctly', () => {
+    // Test implementation
+  });
+});
+```
+
+### Testing Best Practices
+- Test user interactions, not implementation details
+- Use `@testing-library/react` for component testing
+- Use `@testing-library/user-event` for user interactions
+- Test edge cases and error states
+- Mock external dependencies (API calls, localStorage)
+
+### Running Tests
+- `npm test` - Run all tests
+- `npm run test:watch` - Watch mode
+- `npm run test:coverage` - Coverage report
+
+## Documentation Standards
+
+### Code Comments
+- Add comments for complex logic or business rules
+- Explain "why" not "what" (code should be self-documenting)
+- Use JSDoc for function documentation when helpful
+- Example: `// Sync responses with texts array - maintain correspondence between trackNo and results`
+
+### Documentation Files
+- Keep `docs/PRD.md` and `docs/PRD.zh.md` synchronized
+- Update `docs/ARCHITECTURE.md` when architecture changes
+- Update `docs/API.md` when API integration changes
+- Update `README.md` when adding features or changing setup
+
+### PRD Synchronization
+- When adding new features, update PRD documents
+- Keep version numbers consistent across documents
+- Update "Last Updated" dates when making significant changes
+
+## Best Practices
+
+### Performance Optimization
+- Use smart caching to avoid redundant API calls
+- Implement loading states for better UX
+- Show progress indicators for batch operations
+- Consider parallel API processing for future (currently sequential)
+
+### Error Handling
+- Always handle errors gracefully
+- Show user-friendly error messages
+- Provide retry mechanisms
+- Log errors for debugging (console.error in development)
+
+### User Experience
+- Provide immediate feedback on user actions
+- Show loading states during async operations
+- Display progress for batch operations
+- Auto-save user input to prevent data loss
+- Use visual status classification (colors)
+
+### Security
+- No authentication currently (public access)
+- Data stored locally (browser)
+- Future: Anonymous Supabase access with session-based isolation
+- Don't expose sensitive API details in error messages
+- Validate user input before API calls (future enhancement)
+
+### Code Quality
+- Write self-documenting code
+- Keep functions small and focused
+- Avoid deep nesting
+- Use meaningful variable and function names
+- Follow DRY (Don't Repeat Yourself) principle
+
+## Future Planning
+
+### Supabase Migration
+- Replace localStorage with Supabase database
+- Use session-based identification
+- Enable cross-device synchronization
+- See `docs/DATABASE.md` for schema and migration details
+
+### Planned Features
+- Parallel API processing for faster batch queries
+- Input validation for tracking number format
+- Mobile optimization
+- Export functionality (CSV/Excel)
+- Query history with timestamps
+- Support for multiple shipping carriers
+- Self-hosted CORS proxy
+
+### Technical Debt
+- CORS proxy dependency (external service)
+- Sequential API processing (slow for large batches)
+- No input validation currently
+- Mobile optimization pending
+
+## Development Workflow
+
+### Before Committing
+- Run `npm run lint` to check for linting errors
+- Run `npm test` to ensure tests pass
+- Run `npm run build` to verify build succeeds
+- Update documentation if needed
+
+### Git Commit Messages
+- Use conventional commit format when possible
+- Examples:
+  - `feat: add smart caching for delivered packages`
+  - `fix: correct status classification logic`
+  - `docs: update README with new features`
+  - `refactor: extract API call logic to custom hook`
+
+### Code Review Checklist
+- [ ] Code follows TypeScript strict mode
+- [ ] Uses path aliases (`@/`) for imports
+- [ ] Follows component structure conventions
+- [ ] Uses shadcn/ui components and Tailwind CSS
+- [ ] Handles errors gracefully
+- [ ] Includes tests for new features
+- [ ] Updates documentation if needed
+
+## Node.js & Environment
+
+### Node.js Version
+- Required: Node.js 20.0.0 or higher
+- Recommended: Node.js 22.x LTS
+- Use `.nvmrc` file (22.19.0) for nvm users
+- Run `nvm use` to switch to correct version
+
+### Environment Variables
+- For future Supabase integration:
+  - `NEXT_PUBLIC_SUPABASE_URL`
+  - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- Create `.env.local` for local development
+- Never commit `.env.local` to version control
+
+## Additional Notes
+
+- This project uses Next.js App Router (not Pages Router)
+- All components in `src/app/` are part of the routing system
+- Client components must have `'use client'` directive
+- Server components are the default (no directive needed)
+- Use TypeScript for all new code (no JavaScript files)
+- Follow existing code patterns and conventions
+- When in doubt, refer to existing code in the project
