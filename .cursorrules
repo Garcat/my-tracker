@@ -22,7 +22,7 @@ My Tracker is a web application for tracking multiple shipping/tracking numbers 
 - **Icons**: Lucide React
 - **HTTP Client**: Axios 1.7.9
 - **Testing**: Jest + React Testing Library
-- **Storage**: localStorage (current), Supabase (planned)
+- **Storage**: Server-side file system (Next.js API Routes)
 
 ## Code Style & Conventions
 

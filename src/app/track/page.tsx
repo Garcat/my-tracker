@@ -5,11 +5,16 @@ import ResultList from './resultList';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
+// 当前使用的存储方案：服务器端 API (Next.js API Routes + 文件系统)
+// 这个方案提供真正的服务器端持久化，数据在重启/部署后依然保留
+
+import { loadSharedInputs, saveSharedInputs } from '@/lib/storage-api';
+
 const App: React.FC = () => {
 	const [texts, setTexts] = useState<string[]>([]);
 	const [responses, setResponses] = useState<
-		{ data: 
-			{ 
+		{ data:
+			{
 				hisList: { toStatus: string; createDate: string }[],
 				wbInfo: {expressCode: string}
 			},
@@ -21,6 +26,7 @@ const App: React.FC = () => {
 	const [loading, setLoading] = useState(false);
 	const [hasFirstData, setHasFirstData] = useState(false);
 	const [count, setCount] = useState(0);
+	const [isLoading, setIsLoading] = useState(true);
 
 	const cors_api_host = 'cors-anywhere.herokuapp.com';
 	const cors_api_url = 'https://' + cors_api_host + '/';
@@ -28,30 +34,47 @@ const App: React.FC = () => {
 		cors_api_url + 'http://sys-new-api.auodexpress.com/api/tms/userSys/client/getRouterList';
 
 	useEffect(() => {
-		const storedPreviousInputs = localStorage.getItem('previousInputs');
-		if (storedPreviousInputs) {
-			setTexts(JSON.parse(storedPreviousInputs));
-		}
+		// Load shared data from server
+		const loadData = async () => {
+			try {
+				const sharedInputs = await loadSharedInputs();
+				setTexts(sharedInputs);
+			} catch (error) {
+				console.error('Failed to load shared data:', error);
+				// Fallback to localStorage if API fails
+				const storedPreviousInputs = localStorage.getItem('previousInputs');
+				if (storedPreviousInputs) {
+					setTexts(JSON.parse(storedPreviousInputs));
+				}
+			} finally {
+				setIsLoading(false);
+			}
+		};
+
+		loadData();
+
+		// 单用户模式 - 不需要订阅实时更新
 	}, []);
 
 	const handleTextChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
 		const text = event.target.value;
 		const lines = text.split('\n');
 		const previousLines = texts;
-		
+
 		setTexts(lines);
-		localStorage.setItem('previousInputs', JSON.stringify(lines));
-		
+		// Save to server-side storage
+		saveSharedInputs(lines);
+
 		// Sync responses with texts array using reduce - maintain correspondence between trackNo and results
 		setResponses(prevResponses => {
 			return lines.reduce((newResponses, currentLine) => {
 				const previousIndex = previousLines.indexOf(currentLine);
-				
+
 				// If this line existed in the previous input and we have a result for it
 				if (previousIndex !== -1 && previousIndex < prevResponses.length) {
 					newResponses.push(prevResponses[previousIndex]);
 				}
-				
+
 				return newResponses;
 			}, [] as typeof prevResponses);
 		});
@@ -110,6 +133,19 @@ const App: React.FC = () => {
 		fetchData();
 	};
 
+	if (isLoading) {
+		return (
+			<div className="min-h-screen bg-background p-4">
+				<div className="container mx-auto max-w-7xl">
+					<div className="flex items-center justify-center py-8">
+						<Loader2 className="h-8 w-8 animate-spin" />
+						<span className="ml-2">Loading shared data...</span>
+					</div>
+				</div>
+			</div>
+		);
+	}
+
 	return (
 		<div className="min-h-screen bg-background p-4">
 			<div className="container mx-auto max-w-7xl">
@@ -142,7 +178,9 @@ const App: React.FC = () => {
 									<p className="text-destructive text-sm">Error: {error}</p>
 								</div>
 							)}
-							<p className="text-center text-sm text-muted-foreground">v26.01.09</p>
+							<p className="text-center text-sm text-muted-foreground">
+								v11.19.17 • {texts.length} tracking numbers
+							</p>
 						</CardContent>
 					</Card>
 					

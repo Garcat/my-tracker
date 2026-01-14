@@ -1,5 +1,5 @@
 # Database Schema Documentation
-## My Tracker Application - Supabase Migration
+## My Tracker Application - Server-side File Storage
 
 **Version:** 1.0  
 **Last Updated:** 2024  
@@ -9,50 +9,43 @@
 
 ## Overview
 
-This document describes the planned database schema for migrating from localStorage to Supabase. The migration will enable cross-device synchronization and better data persistence for tracking number inputs.
+This document describes the current storage implementation using Next.js API Routes and server-side file system. The implementation provides persistent storage that survives server restarts and deployments.
 
-## Database Platform
+## Storage Implementation
 
-**Platform**: Supabase (PostgreSQL)  
-**Access**: Anonymous (no authentication required)  
-**Identification**: Browser session ID stored in localStorage
+**Platform**: Next.js API Routes + File System
+**Access**: Server-side persistent storage
+**Current Usage**: Single user persistent storage
 
-## Schema Design
+## File Structure
 
-### Table: `tracking_inputs`
+### Data File: `data/shared-tracking.json`
 
-Stores tracking number inputs per browser session.
+The application stores tracking data in a JSON file on the server file system.
 
-#### Table Structure
+#### File Content Structure
 
-```sql
-CREATE TABLE tracking_inputs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id TEXT NOT NULL,
-  inputs TEXT[] NOT NULL DEFAULT '{}',
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+```json
+{
+  "inputs": ["TRACK001", "TRACK002", "TRACK003"],
+  "lastUpdated": 1703123456789,
+  "version": 42
+}
 ```
 
-#### Column Descriptions
+#### Field Descriptions
 
-| Column | Type | Constraints | Description |
-|--------|------|-------------|-------------|
-| `id` | UUID | PRIMARY KEY, DEFAULT gen_random_uuid() | Unique identifier for each record |
-| `session_id` | TEXT | NOT NULL | Browser session identifier (stored in localStorage) |
-| `inputs` | TEXT[] | NOT NULL, DEFAULT '{}' | Array of tracking numbers |
-| `created_at` | TIMESTAMP | DEFAULT NOW() | Record creation timestamp |
-| `updated_at` | TIMESTAMP | DEFAULT NOW() | Last update timestamp |
+| Field | Type | Description |
+|-------|------|-------------|
+| `inputs` | string[] | Array of tracking numbers entered by the user |
+| `lastUpdated` | number | Unix timestamp of the last update |
+| `version` | number | Version counter for optimistic concurrency control |
 
 #### Indexes
 
 ```sql
--- Index for fast lookups by session_id
-CREATE INDEX idx_tracking_inputs_session_id ON tracking_inputs(session_id);
-
--- Index for cleanup of old records (optional)
-CREATE INDEX idx_tracking_inputs_updated_at ON tracking_inputs(updated_at);
+-- Index for fast lookups by updated_at (for real-time subscriptions)
+CREATE INDEX idx_shared_tracking_inputs_updated_at ON shared_tracking_inputs(updated_at);
 ```
 
 #### Updated At Trigger
@@ -74,47 +67,39 @@ CREATE TRIGGER update_tracking_inputs_updated_at
     EXECUTE FUNCTION update_updated_at_column();
 ```
 
-## Row Level Security (RLS)
+## API Endpoints
 
-### Policy: Anonymous Read/Write
+### GET /api/shared-data
 
-Allow anonymous users to read and write their own session data:
+Load stored tracking inputs.
 
-```sql
--- Enable RLS
-ALTER TABLE tracking_inputs ENABLE ROW LEVEL SECURITY;
-
--- Policy: Allow anonymous users to read their own session data
-CREATE POLICY "Allow anonymous read own session"
-ON tracking_inputs
-FOR SELECT
-TO anon
-USING (true);
-
--- Policy: Allow anonymous users to insert their own session data
-CREATE POLICY "Allow anonymous insert own session"
-ON tracking_inputs
-FOR INSERT
-TO anon
-WITH CHECK (true);
-
--- Policy: Allow anonymous users to update their own session data
-CREATE POLICY "Allow anonymous update own session"
-ON tracking_inputs
-FOR UPDATE
-TO anon
-USING (true)
-WITH CHECK (true);
-
--- Policy: Allow anonymous users to delete their own session data (optional)
-CREATE POLICY "Allow anonymous delete own session"
-ON tracking_inputs
-FOR DELETE
-TO anon
-USING (true);
+**Response:**
+```json
+{
+  "inputs": ["TRACK001", "TRACK002"],
+  "lastUpdated": 1703123456789,
+  "version": 42
+}
 ```
 
-**Note**: The current policies allow full anonymous access. For better security, consider restricting by `session_id` matching, but this requires a custom function or more complex policy.
+### PUT /api/shared-data
+
+Save tracking inputs to server.
+
+**Request:**
+```json
+{
+  "inputs": ["TRACK001", "TRACK002", "TRACK003"]
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "version": 43
+}
+```
 
 ### Alternative: Session-Based RLS
 
@@ -145,10 +130,10 @@ USING (is_session_owner(session_id));
 
 ```mermaid
 erDiagram
-    tracking_inputs {
+    shared_tracking_inputs {
         uuid id PK
-        text session_id
         text_array inputs
+        text last_updated_by
         timestamp created_at
         timestamp updated_at
     }
@@ -158,40 +143,37 @@ erDiagram
 
 ```mermaid
 flowchart LR
-    A[Browser] --> B[Generate Session ID]
-    B --> C[Store in localStorage]
-    C --> D[Use for DB Operations]
-    D --> E[Supabase]
-    E --> F[tracking_inputs Table]
-    
-    G[Component Mount] --> H[Fetch by session_id]
-    H --> E
-    E --> I[Return inputs]
-    I --> G
-    
-    J[Input Change] --> K[Upsert by session_id]
-    K --> E
+    A[Browser] --> B[Next.js API]
+    B --> C[shared_tracking_inputs Table]
+
+    D[Component Mount] --> E[Fetch shared inputs]
+    E --> B
+    B --> F[Return global inputs]
+    F --> D
+
+    G[Input Change] --> H[Update shared record]
+    H --> B
+    B --> I[Broadcast to all users]
+    I --> J[Real-time sync]
 ```
 
 ## Migration Scripts
 
-### Complete Migration Script
+### Complete Setup Script
 
 ```sql
 -- Create table
-CREATE TABLE IF NOT EXISTS tracking_inputs (
+CREATE TABLE IF NOT EXISTS shared_tracking_inputs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  session_id TEXT NOT NULL,
   inputs TEXT[] NOT NULL DEFAULT '{}',
+  last_updated_by TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Create indexes
-CREATE INDEX IF NOT EXISTS idx_tracking_inputs_session_id 
-  ON tracking_inputs(session_id);
-CREATE INDEX IF NOT EXISTS idx_tracking_inputs_updated_at 
-  ON tracking_inputs(updated_at);
+CREATE INDEX IF NOT EXISTS idx_shared_tracking_inputs_updated_at
+  ON shared_tracking_inputs(updated_at);
 
 -- Create updated_at trigger function
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -203,46 +185,36 @@ END;
 $$ language 'plpgsql';
 
 -- Create trigger
-DROP TRIGGER IF EXISTS update_tracking_inputs_updated_at ON tracking_inputs;
-CREATE TRIGGER update_tracking_inputs_updated_at
-    BEFORE UPDATE ON tracking_inputs
+DROP TRIGGER IF EXISTS update_shared_tracking_inputs_updated_at ON shared_tracking_inputs;
+CREATE TRIGGER update_shared_tracking_inputs_updated_at
+    BEFORE UPDATE ON shared_tracking_inputs
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
 
 -- Enable RLS
-ALTER TABLE tracking_inputs ENABLE ROW LEVEL SECURITY;
+ALTER TABLE shared_tracking_inputs ENABLE ROW LEVEL SECURITY;
 
 -- Drop existing policies if they exist
-DROP POLICY IF EXISTS "Allow anonymous read own session" ON tracking_inputs;
-DROP POLICY IF EXISTS "Allow anonymous insert own session" ON tracking_inputs;
-DROP POLICY IF EXISTS "Allow anonymous update own session" ON tracking_inputs;
-DROP POLICY IF EXISTS "Allow anonymous delete own session" ON tracking_inputs;
+DROP POLICY IF EXISTS "Allow anonymous read shared data" ON shared_tracking_inputs;
+DROP POLICY IF EXISTS "Allow anonymous update shared data" ON shared_tracking_inputs;
 
 -- Create RLS policies
-CREATE POLICY "Allow anonymous read own session"
-ON tracking_inputs
+CREATE POLICY "Allow anonymous read shared data"
+ON shared_tracking_inputs
 FOR SELECT
 TO anon
 USING (true);
 
-CREATE POLICY "Allow anonymous insert own session"
-ON tracking_inputs
-FOR INSERT
-TO anon
-WITH CHECK (true);
-
-CREATE POLICY "Allow anonymous update own session"
-ON tracking_inputs
+CREATE POLICY "Allow anonymous update shared data"
+ON shared_tracking_inputs
 FOR UPDATE
 TO anon
 USING (true)
 WITH CHECK (true);
 
-CREATE POLICY "Allow anonymous delete own session"
-ON tracking_inputs
-FOR DELETE
-TO anon
-USING (true);
+-- Insert initial record (only run this once)
+-- INSERT INTO shared_tracking_inputs (inputs) VALUES ('{}')
+-- ON CONFLICT DO NOTHING;
 ```
 
 ### Rollback Script
@@ -275,80 +247,59 @@ DROP INDEX IF EXISTS idx_tracking_inputs_updated_at;
 
 ### Read Pattern
 
-**Use Case**: Load saved inputs on component mount
+**Use Case**: Load stored inputs when app starts
 
-**Query**:
+**API Call**:
 ```typescript
-const { data, error } = await supabase
-  .from('tracking_inputs')
-  .select('inputs')
-  .eq('session_id', sessionId)
-  .single();
+const response = await fetch('/api/shared-data');
+const data = await response.json();
+// data.inputs contains the tracking numbers
 ```
 
-**SQL Equivalent**:
-```sql
-SELECT inputs 
-FROM tracking_inputs 
-WHERE session_id = 'session_id_value' 
-LIMIT 1;
-```
-
-### Write Pattern (Upsert)
-
-**Use Case**: Save inputs on change
-
-**Query**:
+**Implementation**:
 ```typescript
-const { data, error } = await supabase
-  .from('tracking_inputs')
-  .upsert(
-    {
-      session_id: sessionId,
-      inputs: trackingNumbers,
-      updated_at: new Date().toISOString()
-    },
-    {
-      onConflict: 'session_id'
-    }
-  )
-  .select();
+// src/lib/storage-api.ts
+export async function loadSharedInputs(): Promise<string[]> {
+  const response = await fetch('/api/shared-data');
+  const data = await response.json();
+  return data.inputs || [];
+}
 ```
 
-**SQL Equivalent**:
-```sql
-INSERT INTO tracking_inputs (session_id, inputs, updated_at)
-VALUES ('session_id_value', ARRAY['track1', 'track2'], NOW())
-ON CONFLICT (session_id) 
-DO UPDATE SET 
-  inputs = EXCLUDED.inputs,
-  updated_at = EXCLUDED.updated_at;
-```
+### Write Pattern
 
-**Note**: Requires unique constraint on `session_id`:
+**Use Case**: Save inputs to server when changed
 
-```sql
-ALTER TABLE tracking_inputs 
-ADD CONSTRAINT unique_session_id UNIQUE (session_id);
-```
-
-### Delete Pattern
-
-**Use Case**: Clear saved inputs (optional feature)
-
-**Query**:
+**API Call**:
 ```typescript
-const { error } = await supabase
-  .from('tracking_inputs')
-  .delete()
-  .eq('session_id', sessionId);
+await fetch('/api/shared-data', {
+  method: 'PUT',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ inputs: trackingNumbers })
+});
 ```
 
-**SQL Equivalent**:
-```sql
-DELETE FROM tracking_inputs 
-WHERE session_id = 'session_id_value';
+**Implementation**:
+```typescript
+// src/lib/storage-api.ts
+export async function saveSharedInputs(inputs: string[]): Promise<void> {
+  await fetch('/api/shared-data', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ inputs })
+  });
+}
 ```
+
+### Single User Benefits
+
+**No Concurrency Issues**: Only one user updates data, no conflicts
+
+**Simple Architecture**: No need for subscriptions or real-time sync
+
+**Reliable Storage**: Server file system provides consistent persistence
+
+**Easy Deployment**: Works with any hosting platform that supports Node.js
 
 ## Session ID Generation
 
@@ -402,48 +353,45 @@ function generateBrowserFingerprint(): string {
 
 ## Data Migration Strategy
 
-### Migration from localStorage
+### Migration to Server Storage
 
-**Current State**: Data stored in localStorage as JSON array
+**Current State**: Data stored in localStorage
 
 **Migration Steps**:
 
-1. **On First Load After Migration**:
+1. **Server Setup**:
    ```typescript
-   // Check if localStorage has old data
-   const oldData = localStorage.getItem('previousInputs');
-   if (oldData) {
-     const inputs = JSON.parse(oldData);
-     // Migrate to Supabase
-     await migrateToSupabase(inputs);
-     // Optionally clear old localStorage data
-     // localStorage.removeItem('previousInputs');
-   }
+   // Create data directory
+   mkdir -p data
+
+   // Initial data file
+   echo '{"inputs":[],"lastUpdated":0,"version":1}' > data/shared-tracking.json
    ```
 
-2. **Migration Function**:
+2. **Environment Setup**:
+   ```bash
+   # Set API base URL (for production deployment)
+   NEXT_PUBLIC_API_BASE_URL=https://your-domain.com
+   ```
+
+3. **Data Migration**:
    ```typescript
-   async function migrateToSupabase(inputs: string[]) {
-     const sessionId = getOrCreateSessionId();
-     const { error } = await supabase
-       .from('tracking_inputs')
-       .upsert({
-         session_id: sessionId,
-         inputs: inputs
-       }, {
-         onConflict: 'session_id'
-       });
-     
-     if (error) {
-       console.error('Migration failed:', error);
+   // One-time migration from localStorage to server
+   const migrateToServer = async () => {
+     const localData = localStorage.getItem('previousInputs');
+     if (localData) {
+       const inputs = JSON.parse(localData);
+       await saveSharedInputs(inputs);
+       localStorage.removeItem('previousInputs'); // Clean up
      }
-   }
+   };
    ```
 
-3. **Backward Compatibility**:
-   - Keep localStorage as fallback
-   - Try Supabase first, fall back to localStorage if Supabase fails
-   - Gradually migrate users
+**Benefits**:
+- ✅ Data persists across deployments
+- ✅ Single source of truth
+- ✅ No external service dependencies
+- ✅ Simple and reliable
 
 ## Data Cleanup
 
@@ -463,7 +411,7 @@ WHERE updated_at < NOW() - INTERVAL '90 days';
 
 ### Automated Cleanup
 
-**Option 1**: Supabase Cron Job (Edge Function)
+**Option 1**: File System Cleanup Script
 - Run daily/weekly
 - Delete old records
 
@@ -478,25 +426,43 @@ WHERE updated_at < NOW() - INTERVAL '90 days';
 
 ### Query Performance
 
-**Indexes**: Ensure `session_id` is indexed for fast lookups
+**Indexes**: `updated_at` is indexed for real-time subscriptions
 
 **Query Optimization**:
-- Use `.single()` for single row queries
-- Limit result sets when possible
-- Use `.select()` to fetch only needed columns
+- Single record queries are fast
+- Use real-time subscriptions for live updates
+- Consider caching shared data locally
 
-### Storage Optimization
+### Concurrency Management
 
-**Array Size**: PostgreSQL arrays can handle large sizes, but consider:
-- Limit maximum number of tracking numbers per session
-- Archive old data to separate table
-- Compress data if needed
+**Conflict Resolution**: Last-write-wins strategy
+```typescript
+// Optimistic updates with conflict detection
+async function updateSharedInputs(newInputs: string[]) {
+  const currentData = await getCurrentSharedData();
 
-### Connection Pooling
+  // Check if someone else updated since our last fetch
+  if (currentData.updated_at > lastFetchTime) {
+    // Handle conflict - merge or notify user
+    return handleConflict(currentData, newInputs);
+  }
 
-**Supabase**: Handles connection pooling automatically
-- No manual configuration needed
-- Optimized for serverless environments
+  // Proceed with update
+  await saveSharedInputs
+    .from('shared_tracking_inputs')
+    .update({ inputs: newInputs })
+    .eq('id', sharedRecordId);
+}
+```
+
+### Real-time Sync
+
+**Benefits**:
+- All users see changes immediately
+- No need for manual refresh
+- Better collaborative experience
+
+**Implementation**: File system watchers (optional)
 
 ## Security Considerations
 
@@ -521,9 +487,9 @@ WHERE updated_at < NOW() - INTERVAL '90 days';
 
 ### SQL Injection Prevention
 
-**Supabase Client**: Automatically prevents SQL injection
-- Use parameterized queries
-- Never concatenate user input into SQL
+**File System**: JSON serialization handles data safely
+- Automatic string escaping
+- No SQL injection concerns
 
 ## Monitoring and Analytics
 
@@ -535,12 +501,37 @@ WHERE updated_at < NOW() - INTERVAL '90 days';
 4. **Session Count**: Track unique sessions
 5. **Storage Usage**: Monitor database storage
 
-### Supabase Dashboard
+### Server Monitoring
 
-- Use Supabase dashboard for monitoring
-- Set up alerts for errors
-- Monitor API usage and limits
+- Monitor server disk usage
+- Track API response times
+- Log file system operations
 
 ---
 
-*This database documentation will be updated as the migration is implemented.*
+## Implementation Benefits
+
+### For Single User Scenario
+- **True Persistence**: Data survives server restarts, deployments, and container recreations
+- **Server-side Reliability**: More reliable than browser localStorage
+- **Cross-device Access**: Access data from any device/browser with internet connection
+- **Automatic Backup**: Server-side storage acts as automatic backup
+- **Version Control**: Built-in version tracking for data integrity
+
+### Technical Advantages
+- **No External Dependencies**: No need for database services or APIs
+- **Simple Architecture**: File-based storage with REST API wrapper
+- **Atomic Operations**: File system ensures data consistency
+- **Platform Agnostic**: Works on any Node.js hosting platform
+- **Automatic Fallback**: Graceful degradation to localStorage if server fails
+
+## Implementation Priority
+
+1. **Database Setup**: Create shared table and policies
+2. **Basic CRUD**: Implement load/save shared data
+3. **Real-time Sync**: Add live updates
+4. **Conflict Resolution**: Handle concurrent updates
+5. **Migration**: Move existing data to shared model
+6. **Testing**: Ensure reliability with multiple users
+
+*This documentation describes the current server-side file storage implementation for single-user persistent storage.*

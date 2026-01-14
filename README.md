@@ -11,7 +11,7 @@ My Tracker allows users to input multiple tracking numbers (one per line) and qu
 - **Multi-line Input**: Paste multiple tracking numbers at once (one per line)
 - **Batch Processing**: Query all tracking numbers simultaneously
 - **Real-time Updates**: Progress counter shows remaining queries
-- **Auto-save**: Inputs are automatically saved (currently localStorage, Supabase migration planned)
+- **Auto-save**: Inputs are automatically saved to server-side storage
 - **Status Display**: Shows tracking status and creation date for each number with visual status classification
 - **Smart Caching**: Automatically skips querying already-delivered packages to improve performance
 - **Status Classification**: Color-coded status display (delivered = red, in-transit = yellow)
@@ -21,7 +21,7 @@ My Tracker allows users to input multiple tracking numbers (one per line) and qu
 
 ## Tech Stack
 
-- **Framework**: [Next.js](https://nextjs.org/) 15.1.2 (App Router)
+- **Framework**: [Next.js](https://nextjs.org/) 15.5.9 (App Router)
 - **Language**: [TypeScript](https://www.typescriptlang.org/) 5
 - **UI Library**: [React](https://react.dev/) 19.0.0
 - **Styling**: [Tailwind CSS](https://tailwindcss.com/) 3.4.1
@@ -29,7 +29,7 @@ My Tracker allows users to input multiple tracking numbers (one per line) and qu
 - **Icons**: [Lucide React](https://lucide.dev/)
 - **HTTP Client**: [Axios](https://axios-http.com/) 1.7.9
 - **Testing**: [Jest](https://jestjs.io/) + [React Testing Library](https://testing-library.com/react)
-- **Database**: Supabase (planned migration)
+- **Storage**: Server-side file storage (Next.js API Routes)
 
 ## Getting Started
 
@@ -190,14 +190,14 @@ Tracking numbers are stored in the browser's localStorage:
 - **Format**: JSON array of strings
 - **Scope**: Per-browser, per-domain
 
-### Planned: Supabase Migration
+### Current: Server-side File Storage
 
-Migration to Supabase is planned to enable:
-- Cross-device synchronization
-- Better data persistence
-- Server-side backup
+Data is stored server-side using file system storage via Next.js API Routes:
+- Server restart/deployment persistent
+- Cross-device access via internet
+- Automatic fallback to localStorage
 
-See [docs/DATABASE.md](docs/DATABASE.md) for database schema and migration details.
+See [docs/DATABASE.md](docs/DATABASE.md) for storage implementation details.
 
 ## Deployment
 
@@ -217,10 +217,9 @@ The application can be deployed to any platform that supports Next.js:
 
 ### Environment Variables
 
-For Supabase integration (future):
+For production deployment (optional):
 ```
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+NEXT_PUBLIC_API_BASE_URL=https://your-domain.com
 ```
 
 ## Documentation
@@ -254,13 +253,13 @@ Test files are located alongside their source files in `__tests__` directories.
 
 1. **CORS Proxy Dependency**: Relies on external CORS proxy service (cors-anywhere.herokuapp.com)
 2. **Sequential Processing**: API calls are processed one at a time (may be slow for large batches)
-3. **Local Storage Only**: Data limited to single browser/device (until Supabase migration)
+3. **Server-side Storage**: Data persists on server, accessible from any device
 4. **Single API Source**: Only supports auodexpress.com API
 5. **Proxy Activation Required**: CORS proxy requires manual activation on first use
 
 ## Future Enhancements
 
-- [ ] Migrate to Supabase for cloud storage
+- [ ] Consider database migration for multi-user scenarios
 - [ ] Parallel API processing for faster batch queries
 - [ ] Input validation for tracking number format
 - [ ] Mobile optimization
