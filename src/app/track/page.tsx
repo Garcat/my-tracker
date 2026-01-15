@@ -9,6 +9,7 @@ import { Loader2 } from 'lucide-react';
 // 这个方案提供真正的服务器端持久化，数据在重启/部署后依然保留
 
 import { loadSharedInputs, saveSharedInputs } from '@/lib/storage-api';
+import { getCurrentVersion } from '@/lib/utils';
 
 const App: React.FC = () => {
 	const [texts, setTexts] = useState<string[]>([]);
@@ -179,7 +180,7 @@ const App: React.FC = () => {
 								</div>
 							)}
 							<p className="text-center text-sm text-muted-foreground">
-								v26.01.14.22 • {texts.length} tracking numbers
+								v{getCurrentVersion()} • {texts.length} tracking numbers
 							</p>
 						</CardContent>
 					</Card>

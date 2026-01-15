@@ -310,7 +310,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Version
 
-Current version: **v11.19.17**
+Current version: **v0.2.0**
 
 ---
 

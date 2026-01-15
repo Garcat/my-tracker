@@ -1,7 +1,7 @@
 # Product Requirements Document (PRD)
 ## My Tracker Application
 
-**Version:** 1.1  
+**Version:** 0.2.0
 **Last Updated:** 2025-01-27  
 **Status:** Active Development
 
