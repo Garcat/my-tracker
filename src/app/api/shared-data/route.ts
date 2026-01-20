@@ -1,45 +1,53 @@
 /**
  * Next.js API Route - 服务器端共享数据存储
- * 真正的服务器端持久化方案
+ * 使用 Vercel KV 进行持久化存储
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs/promises';
-import path from 'path';
+import { kv } from '@vercel/kv';
 
-const DATA_FILE = path.join(process.cwd(), 'data', 'shared-tracking.json');
+const SHARED_KEY = 'shared-tracking-data';
 
-// 确保数据目录存在
-async function ensureDataDirectory() {
-  const dataDir = path.dirname(DATA_FILE);
+// 数据类型定义
+interface SharedTrackingData {
+  inputs: string[];
+  lastUpdated: number;
+  version: number;
+}
+
+// 默认数据结构
+const DEFAULT_DATA: SharedTrackingData = {
+  inputs: [],
+  lastUpdated: Date.now(),
+  version: 1
+};
+
+// 加载共享数据
+async function loadSharedData(): Promise<SharedTrackingData> {
   try {
-    await fs.access(dataDir);
-  } catch {
-    await fs.mkdir(dataDir, { recursive: true });
+    const data = await kv.get(SHARED_KEY);
+    return data ? JSON.parse(data as string) : DEFAULT_DATA;
+  } catch (error) {
+    console.error('Failed to load from KV:', error);
+    return DEFAULT_DATA;
   }
 }
 
-// 确保数据文件存在
-async function ensureDataFile() {
-  await ensureDataDirectory();
-
+// 保存共享数据
+async function saveSharedData(data: SharedTrackingData): Promise<boolean> {
   try {
-    await fs.access(DATA_FILE);
-  } catch {
-    await fs.writeFile(DATA_FILE, JSON.stringify({
-      inputs: [],
-      lastUpdated: Date.now(),
-      version: 1
-    }, null, 2));
+    await kv.set(SHARED_KEY, JSON.stringify(data));
+    return true;
+  } catch (error) {
+    console.error('Failed to save to KV:', error);
+    return false;
   }
 }
 
 // GET - 加载共享数据
 export async function GET() {
   try {
-    await ensureDataFile();
-    const content = await fs.readFile(DATA_FILE, 'utf-8');
-    const data = JSON.parse(content);
+    const data = await loadSharedData();
 
     return NextResponse.json({
       inputs: data.inputs || [],
@@ -69,9 +77,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // 读取现有数据进行版本检查
-    await ensureDataFile();
-    const existingContent = await fs.readFile(DATA_FILE, 'utf-8');
-    const existingData = JSON.parse(existingContent);
+    const existingData = await loadSharedData();
 
     // 更新数据
     const newData = {
@@ -80,7 +86,13 @@ export async function PUT(request: NextRequest) {
       version: (existingData.version || 0) + 1
     };
 
-    await fs.writeFile(DATA_FILE, JSON.stringify(newData, null, 2));
+    const success = await saveSharedData(newData);
+    if (!success) {
+      return NextResponse.json(
+        { error: 'Failed to save data' },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
