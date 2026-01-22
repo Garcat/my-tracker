@@ -19,7 +19,7 @@ const shouldUseKV = useKVStorage || isVercelEnvironment;
 const SHARED_KEY = 'shared-tracking-data';
 
 // 创建 Redis 客户端（如果使用 KV 存储）
-let redisClient: any = null;
+let redisClient: ReturnType<typeof createClient> | null = null;
 
 function getRedisClient() {
   if (!redisClient && shouldUseKV && process.env.KV_REDIS_URL) {
@@ -28,7 +28,7 @@ function getRedisClient() {
     });
 
     // 连接事件处理
-    redisClient.on('error', (err: any) => {
+    redisClient.on('error', (err: unknown) => {
       console.error('Redis Client Error:', err);
     });
 
