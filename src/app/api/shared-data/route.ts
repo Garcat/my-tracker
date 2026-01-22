@@ -1,13 +1,43 @@
 /**
  * Next.js API Route - 服务器端共享数据存储
- * 使用 Vercel KV 进行持久化存储
+ * 灵活存储策略：支持文件系统和 Vercel KV
+ * - 本地开发：默认文件系统，可通过 USE_KV_STORAGE=true 切换到 KV
+ * - Vercel 部署：自动使用 KV
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { kv } from '@vercel/kv';
+import { promises as fs } from 'fs';
+import path from 'path';
+import { createClient } from 'redis';
+
+// 检测存储策略
+// 优先级：USE_KV_STORAGE > VERCEL 环境检测
+const useKVStorage = process.env.USE_KV_STORAGE === 'true';
+const isVercelEnvironment = process.env.VERCEL === '1' || process.env.VERCEL_ENV !== undefined;
+const shouldUseKV = useKVStorage || isVercelEnvironment;
 
 const SHARED_KEY = 'shared-tracking-data';
 
+// 创建 Redis 客户端（如果使用 KV 存储）
+let redisClient: any = null;
+
+function getRedisClient() {
+  if (!redisClient && shouldUseKV && process.env.KV_REDIS_URL) {
+    redisClient = createClient({
+      url: process.env.KV_REDIS_URL
+    });
+
+    // 连接事件处理
+    redisClient.on('error', (err: any) => {
+      console.error('Redis Client Error:', err);
+    });
+
+    redisClient.on('connect', () => {
+      console.log('Connected to Redis');
+    });
+  }
+  return redisClient;
+}
 // 数据类型定义
 interface SharedTrackingData {
   inputs: string[];
@@ -24,23 +54,74 @@ const DEFAULT_DATA: SharedTrackingData = {
 
 // 加载共享数据
 async function loadSharedData(): Promise<SharedTrackingData> {
-  try {
-    const data = await kv.get(SHARED_KEY);
-    return data ? JSON.parse(data as string) : DEFAULT_DATA;
-  } catch (error) {
-    console.error('Failed to load from KV:', error);
-    return DEFAULT_DATA;
+  if (shouldUseKV) {
+    // 使用 Redis 客户端连接到 Vercel KV
+    try {
+      const client = getRedisClient();
+      if (!client) {
+        throw new Error('Redis client not available');
+      }
+
+      // 确保连接
+      if (!client.isOpen) {
+        await client.connect();
+      }
+
+      const data = await client.get(SHARED_KEY);
+      return data ? JSON.parse(data) : DEFAULT_DATA;
+    } catch (error) {
+      console.error('Failed to load from Redis KV:', error);
+      return DEFAULT_DATA;
+    }
+  } else {
+    // 本地开发环境：使用文件系统
+    try {
+      const filePath = path.join(process.cwd(), 'data', 'shared-tracking.json');
+      const fileContents = await fs.readFile(filePath, 'utf8');
+      return JSON.parse(fileContents);
+    } catch (error) {
+      console.error('Failed to load from file:', error);
+      return DEFAULT_DATA;
+    }
   }
 }
 
 // 保存共享数据
 async function saveSharedData(data: SharedTrackingData): Promise<boolean> {
-  try {
-    await kv.set(SHARED_KEY, JSON.stringify(data));
-    return true;
-  } catch (error) {
-    console.error('Failed to save to KV:', error);
-    return false;
+  if (shouldUseKV) {
+    // 使用 Redis 客户端连接到 Vercel KV
+    try {
+      const client = getRedisClient();
+      if (!client) {
+        throw new Error('Redis client not available');
+      }
+
+      // 确保连接
+      if (!client.isOpen) {
+        await client.connect();
+      }
+
+      await client.set(SHARED_KEY, JSON.stringify(data));
+      return true;
+    } catch (error) {
+      console.error('Failed to save to Redis KV:', error);
+      return false;
+    }
+  } else {
+    // 本地开发环境：使用文件系统
+    try {
+      const filePath = path.join(process.cwd(), 'data', 'shared-tracking.json');
+      const dirPath = path.dirname(filePath);
+
+      // 确保目录存在
+      await fs.mkdir(dirPath, { recursive: true });
+
+      await fs.writeFile(filePath, JSON.stringify(data, null, 2));
+      return true;
+    } catch (error) {
+      console.error('Failed to save to file:', error);
+      return false;
+    }
   }
 }
 
@@ -85,7 +166,6 @@ export async function PUT(request: NextRequest) {
       lastUpdated: Date.now(),
       version: (existingData.version || 0) + 1
     };
-
     const success = await saveSharedData(newData);
     if (!success) {
       return NextResponse.json(
