@@ -179,7 +179,7 @@ const App: React.FC = () => {
 								</div>
 							)}
 							<p className="text-center text-sm text-muted-foreground">
-								v26.01.22.15 • {texts.length} tracking numbers
+								v26.01.22.16 • {texts.length} tracking numbers
 							</p>
 						</CardContent>
 					</Card>
