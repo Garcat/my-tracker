@@ -10,6 +10,18 @@ import { Loader2 } from 'lucide-react';
 
 import { loadSharedTrackingState, saveLastTrackingFetchAt, saveSharedInputs } from '@/lib/storage-api';
 
+function formatLastQueryTime(timestamp: number): string {
+	return new Date(timestamp).toLocaleString('zh-CN', {
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+		hour: '2-digit',
+		minute: '2-digit',
+		second: '2-digit',
+		hour12: false,
+	});
+}
+
 const App: React.FC = () => {
 	const [texts, setTexts] = useState<string[]>([]);
 	const [responses, setResponses] = useState<
@@ -184,15 +196,7 @@ const App: React.FC = () => {
 							</Button>
 							{lastUpdatedAt !== null && (
 								<p className="text-center text-xs text-muted-foreground">
-									最后更新：{new Date(lastUpdatedAt).toLocaleString('zh-CN', {
-										year: 'numeric',
-										month: '2-digit',
-										day: '2-digit',
-										hour: '2-digit',
-										minute: '2-digit',
-										second: '2-digit',
-										hour12: false,
-									})}
+									最后更新：{formatLastQueryTime(lastUpdatedAt)}
 								</p>
 							)}
 							{error && (
@@ -216,6 +220,11 @@ const App: React.FC = () => {
 									</span>
 								) : `${texts.length} records updated.`}
 							</CardDescription>
+							{lastUpdatedAt !== null && (
+								<p className="text-xs text-muted-foreground mt-2">
+									最后一次查询：{formatLastQueryTime(lastUpdatedAt)}
+								</p>
+							)}
 						</CardHeader>
 						<CardContent>
 							{!hasFirstData && loading ? (
