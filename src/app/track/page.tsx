@@ -8,7 +8,7 @@ import { Loader2 } from 'lucide-react';
 // 当前使用的存储方案：服务器端 API (Next.js API Routes + 文件系统)
 // 这个方案提供真正的服务器端持久化，数据在重启/部署后依然保留
 
-import { loadSharedInputs, saveSharedInputs } from '@/lib/storage-api';
+import { loadSharedTrackingState, saveLastTrackingFetchAt, saveSharedInputs } from '@/lib/storage-api';
 
 const App: React.FC = () => {
 	const [texts, setTexts] = useState<string[]>([]);
@@ -27,6 +27,7 @@ const App: React.FC = () => {
 	const [hasFirstData, setHasFirstData] = useState(false);
 	const [count, setCount] = useState(0);
 	const [isLoading, setIsLoading] = useState(true);
+	const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
 
 	const cors_api_host = 'cors-anywhere.herokuapp.com';
 	const cors_api_url = 'https://' + cors_api_host + '/';
@@ -37,8 +38,11 @@ const App: React.FC = () => {
 		// Load shared data from server
 		const loadData = async () => {
 			try {
-				const sharedInputs = await loadSharedInputs();
-				setTexts(sharedInputs);
+				const { inputs, lastTrackingFetchAt } = await loadSharedTrackingState();
+				setTexts(inputs);
+				if (lastTrackingFetchAt !== null) {
+					setLastUpdatedAt(lastTrackingFetchAt);
+				}
 			} catch (error) {
 				console.error('Failed to load shared data:', error);
 				// Fallback to localStorage if API fails
@@ -120,6 +124,11 @@ const App: React.FC = () => {
 				setError(null);				
 				setHasFirstData(true);
 			}
+			if (texts.some((line) => line.trim())) {
+				const now = Date.now();
+				setLastUpdatedAt(now);
+				await saveLastTrackingFetchAt(now);
+			}
 		} catch (error: unknown) {
 			setError(error instanceof Error ? error.message : 'Unknown errors');
 		} finally {
@@ -173,6 +182,19 @@ const App: React.FC = () => {
 							>
 								{loading ? (<span className="inline-flex items-center"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Fetching...</span>) : 'Submit'}
 							</Button>
+							{lastUpdatedAt !== null && (
+								<p className="text-center text-xs text-muted-foreground">
+									最后更新：{new Date(lastUpdatedAt).toLocaleString('zh-CN', {
+										year: 'numeric',
+										month: '2-digit',
+										day: '2-digit',
+										hour: '2-digit',
+										minute: '2-digit',
+										second: '2-digit',
+										hour12: false,
+									})}
+								</p>
+							)}
 							{error && (
 								<div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
 									<p className="text-destructive text-sm">Error: {error}</p>

@@ -43,14 +43,29 @@ interface SharedTrackingData {
   inputs: string[];
   lastUpdated: number;
   version: number;
+  /** 最近一次 Submit 成功拉取物流的时间戳（毫秒） */
+  lastTrackingFetchAt: number | null;
 }
 
 // 默认数据结构
 const DEFAULT_DATA: SharedTrackingData = {
   inputs: [],
   lastUpdated: Date.now(),
-  version: 1
+  version: 1,
+  lastTrackingFetchAt: null,
 };
+
+function normalizeSharedData(raw: unknown): SharedTrackingData {
+  const d = raw as Partial<SharedTrackingData>;
+  const fetchAt = d.lastTrackingFetchAt;
+  return {
+    inputs: Array.isArray(d.inputs) ? d.inputs : [],
+    lastUpdated: typeof d.lastUpdated === 'number' ? d.lastUpdated : Date.now(),
+    version: typeof d.version === 'number' ? d.version : 1,
+    lastTrackingFetchAt:
+      typeof fetchAt === 'number' && Number.isFinite(fetchAt) ? fetchAt : null,
+  };
+}
 
 // 加载共享数据
 async function loadSharedData(): Promise<SharedTrackingData> {
@@ -68,7 +83,7 @@ async function loadSharedData(): Promise<SharedTrackingData> {
       }
 
       const data = await client.get(SHARED_KEY);
-      return data ? JSON.parse(data) : DEFAULT_DATA;
+      return data ? normalizeSharedData(JSON.parse(data)) : DEFAULT_DATA;
     } catch (error) {
       console.error('Failed to load from Redis KV:', error);
       return DEFAULT_DATA;
@@ -78,7 +93,7 @@ async function loadSharedData(): Promise<SharedTrackingData> {
     try {
       const filePath = path.join(process.cwd(), 'data', 'shared-tracking.json');
       const fileContents = await fs.readFile(filePath, 'utf8');
-      return JSON.parse(fileContents);
+      return normalizeSharedData(JSON.parse(fileContents));
     } catch (error) {
       console.error('Failed to load from file:', error);
       return DEFAULT_DATA;
@@ -133,7 +148,8 @@ export async function GET() {
     return NextResponse.json({
       inputs: data.inputs || [],
       lastUpdated: data.lastUpdated,
-      version: data.version
+      version: data.version,
+      lastTrackingFetchAt: data.lastTrackingFetchAt,
     });
   } catch (error) {
     console.error('Failed to load shared data:', error);
@@ -148,11 +164,34 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { inputs } = body;
+    const { inputs, lastTrackingFetchAt } = body as {
+      inputs?: string[];
+      lastTrackingFetchAt?: number;
+    };
 
-    if (!Array.isArray(inputs)) {
+    const hasInputs = inputs !== undefined;
+    const hasFetchAt = lastTrackingFetchAt !== undefined;
+
+    if (!hasInputs && !hasFetchAt) {
+      return NextResponse.json(
+        { error: 'Provide inputs and/or lastTrackingFetchAt' },
+        { status: 400 }
+      );
+    }
+
+    if (hasInputs && !Array.isArray(inputs)) {
       return NextResponse.json(
         { error: 'Invalid inputs format' },
+        { status: 400 }
+      );
+    }
+
+    if (
+      hasFetchAt &&
+      (typeof lastTrackingFetchAt !== 'number' || !Number.isFinite(lastTrackingFetchAt))
+    ) {
+      return NextResponse.json(
+        { error: 'Invalid lastTrackingFetchAt' },
         { status: 400 }
       );
     }
@@ -161,10 +200,13 @@ export async function PUT(request: NextRequest) {
     const existingData = await loadSharedData();
 
     // 更新数据
-    const newData = {
-      inputs,
-      lastUpdated: Date.now(),
-      version: (existingData.version || 0) + 1
+    const newData: SharedTrackingData = {
+      inputs: hasInputs ? inputs! : existingData.inputs,
+      lastUpdated: hasInputs ? Date.now() : existingData.lastUpdated,
+      version: (existingData.version || 0) + 1,
+      lastTrackingFetchAt: hasFetchAt
+        ? lastTrackingFetchAt!
+        : existingData.lastTrackingFetchAt,
     };
     const success = await saveSharedData(newData);
     if (!success) {

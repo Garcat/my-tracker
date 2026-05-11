@@ -9,10 +9,46 @@ interface SharedData {
   inputs: string[];
   lastUpdated: number;
   version: number;
+  lastTrackingFetchAt: number | null;
 }
 
-// 加载共享数据
-export async function loadSharedInputs(): Promise<string[]> {
+export interface SharedTrackingState {
+  inputs: string[];
+  lastTrackingFetchAt: number | null;
+}
+
+function readLegacyLastFetchMs(): number | null {
+  try {
+    const legacy = localStorage.getItem('lastTrackingFetchAt');
+    if (!legacy) {
+      return null;
+    }
+    const n = parseInt(legacy, 10);
+    return !Number.isNaN(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+function readFallbackLastFetchMs(): number | null {
+  try {
+    const stored = localStorage.getItem('shared-api-fallback');
+    if (!stored) {
+      return readLegacyLastFetchMs();
+    }
+    const parsed = JSON.parse(stored) as { lastTrackingFetchAt?: unknown };
+    const raw = parsed.lastTrackingFetchAt;
+    if (typeof raw === 'number' && Number.isFinite(raw)) {
+      return raw;
+    }
+    return readLegacyLastFetchMs();
+  } catch {
+    return readLegacyLastFetchMs();
+  }
+}
+
+// 加载共享数据（单号列表 + 最后拉取时间）
+export async function loadSharedTrackingState(): Promise<SharedTrackingState> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/shared-data`);
 
@@ -21,12 +57,27 @@ export async function loadSharedInputs(): Promise<string[]> {
     }
 
     const data: SharedData = await response.json();
-    return data.inputs || [];
+    const fetchAt =
+      typeof data.lastTrackingFetchAt === 'number' && Number.isFinite(data.lastTrackingFetchAt)
+        ? data.lastTrackingFetchAt
+        : null;
+    return {
+      inputs: data.inputs || [],
+      lastTrackingFetchAt: fetchAt,
+    };
   } catch (error) {
     console.error('Failed to load from API:', error);
-    // 降级到本地存储
-    return loadFromLocalStorage();
+    return {
+      inputs: loadFromLocalStorage(),
+      lastTrackingFetchAt: readFallbackLastFetchMs(),
+    };
   }
+}
+
+// 加载共享数据（仅单号列表，兼容旧调用）
+export async function loadSharedInputs(): Promise<string[]> {
+  const state = await loadSharedTrackingState();
+  return state.inputs;
 }
 
 // 保存共享数据
@@ -57,11 +108,68 @@ export async function saveSharedInputs(inputs: string[]): Promise<void> {
   }
 }
 
+/** 将「最后成功拉取物流」时间同步到服务器 */
+export async function saveLastTrackingFetchAt(timestamp: number): Promise<void> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/shared-data`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ lastTrackingFetchAt: timestamp }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    localStorage.setItem('lastTrackingFetchAt', String(timestamp));
+    try {
+      const prevRaw = localStorage.getItem('shared-api-fallback');
+      const prev = prevRaw ? (JSON.parse(prevRaw) as Record<string, unknown>) : {};
+      localStorage.setItem(
+        'shared-api-fallback',
+        JSON.stringify({
+          ...prev,
+          lastTrackingFetchAt: timestamp,
+          version: result.version,
+          cached: true,
+        }),
+      );
+    } catch {
+      // ignore
+    }
+    console.log('Last fetch time saved via API, version:', result.version);
+  } catch (error) {
+    console.error('Failed to save last fetch time via API:', error);
+    localStorage.setItem('lastTrackingFetchAt', String(timestamp));
+    try {
+      const prevRaw = localStorage.getItem('shared-api-fallback');
+      const prev = prevRaw ? (JSON.parse(prevRaw) as Record<string, unknown>) : {};
+      localStorage.setItem(
+        'shared-api-fallback',
+        JSON.stringify({
+          ...prev,
+          lastTrackingFetchAt: timestamp,
+          cached: true,
+        }),
+      );
+    } catch {
+      // ignore
+    }
+  }
+}
+
 // 本地存储降级方案
 function loadFromLocalStorage(): string[] {
   try {
     const stored = localStorage.getItem('shared-api-fallback');
-    return stored ? JSON.parse(stored).inputs || [] : [];
+    if (!stored) {
+      return [];
+    }
+    const parsed = JSON.parse(stored) as { inputs?: unknown };
+    return Array.isArray(parsed.inputs) ? parsed.inputs : [];
   } catch {
     return [];
   }
@@ -69,11 +177,35 @@ function loadFromLocalStorage(): string[] {
 
 function saveToLocalStorage(inputs: string[], version?: number): void {
   try {
-    localStorage.setItem('shared-api-fallback', JSON.stringify({
+    const prevRaw = localStorage.getItem('shared-api-fallback');
+    let lastTrackingFetchAt: number | null = null;
+    if (prevRaw) {
+      try {
+        const p = JSON.parse(prevRaw) as { lastTrackingFetchAt?: unknown };
+        if (typeof p.lastTrackingFetchAt === 'number' && Number.isFinite(p.lastTrackingFetchAt)) {
+          lastTrackingFetchAt = p.lastTrackingFetchAt;
+        }
+      } catch {
+        // ignore
+      }
+    }
+    if (lastTrackingFetchAt === null) {
+      lastTrackingFetchAt = readLegacyLastFetchMs();
+    }
+    const payload: {
+      inputs: string[];
+      version: number;
+      cached: boolean;
+      lastTrackingFetchAt?: number;
+    } = {
       inputs,
       version: version || Date.now(),
-      cached: true
-    }));
+      cached: true,
+    };
+    if (lastTrackingFetchAt !== null) {
+      payload.lastTrackingFetchAt = lastTrackingFetchAt;
+    }
+    localStorage.setItem('shared-api-fallback', JSON.stringify(payload));
   } catch (error) {
     console.error('Failed to save to localStorage:', error);
   }
@@ -83,21 +215,28 @@ function saveToLocalStorage(inputs: string[], version?: number): void {
 export async function getStoreStatus() {
   try {
     const response = await fetch(`${API_BASE_URL}/api/shared-data`);
-    if (!response.ok) throw new Error();
+    if (!response.ok) {
+      throw new Error();
+    }
 
     const data: SharedData = await response.json();
     return {
       source: 'API',
       version: data.version,
       lastUpdated: new Date(data.lastUpdated).toLocaleString(),
-      inputsCount: data.inputs.length
+      lastTrackingFetchAt:
+        typeof data.lastTrackingFetchAt === 'number'
+          ? new Date(data.lastTrackingFetchAt).toLocaleString()
+          : null,
+      inputsCount: data.inputs.length,
     };
   } catch {
     return {
       source: 'localStorage',
       version: 'unknown',
       lastUpdated: 'unknown',
-      inputsCount: loadFromLocalStorage().length
+      lastTrackingFetchAt: 'unknown',
+      inputsCount: loadFromLocalStorage().length,
     };
   }
 }
