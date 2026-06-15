@@ -39,6 +39,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local persistent data (contains real tracking numbers)
+/data/shared-tracking.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

@@ -1,6 +1,5 @@
 'use client';
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
 import ResultList from './resultList';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,10 +40,7 @@ const App: React.FC = () => {
 	const [isLoading, setIsLoading] = useState(true);
 	const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
 
-	const cors_api_host = 'cors-anywhere.herokuapp.com';
-	const cors_api_url = 'https://' + cors_api_host + '/';
-	const endpoint =
-		cors_api_url + 'http://sys-new-api.auodexpress.com/api/tms/userSys/client/getRouterList';
+	const endpoint = '/api/track';
 
 	useEffect(() => {
 		// Load shared data from server
@@ -122,14 +118,13 @@ const App: React.FC = () => {
 				}
 				
 				// Fetch data for non-delivered or new track numbers
-				const payload = { wayBillCode: text };
-				const response = await axios.post(endpoint, payload, {
-					headers: {
-						Accept: '/',
-						'Content-Type': 'application/json'
-					}
+				const response = await fetch(endpoint, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ wayBillCode: text }),
 				});
-				tmpList.push(response.data);
+				const data = await response.json();
+				tmpList.push(data);
 				pendingCount--;
 				setResponses(tmpList);
 				setCount(pendingCount);
@@ -170,9 +165,6 @@ const App: React.FC = () => {
 	return (
 		<div className="min-h-screen bg-background p-4">
 			<div className="container mx-auto max-w-7xl">
-				<div className="mb-4">
-					<iframe src="https://cors-anywhere.herokuapp.com/corsdemo" width="100%" height="120" className="rounded-lg" />
-				</div>
 				<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 					<Card className="lg:col-span-1">
 						<CardHeader>
