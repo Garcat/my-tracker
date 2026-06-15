@@ -1,23 +1,11 @@
+import { TrackingResult } from '@/types/tracking';
 
 interface Props {
     trackNo: string[];
-    results: {
-            data: {
-                hisList: {
-                    toStatus: string;
-                    createDate: string;
-                }[],
-                wbInfo: {
-                    expressCode: string;
-                }
-            },
-            msg: string,
-            result: boolean
-        }[];    
+    results: TrackingResult[];
 }
 
 const ResultList = ({trackNo, results}: Props) => {
-    console.log(results);
     return (
         <div className="space-y-3">
             {results.map((result, index) => {

@@ -8,6 +8,7 @@ import { Loader2 } from 'lucide-react';
 // 这个方案提供真正的服务器端持久化，数据在重启/部署后依然保留
 
 import { loadSharedTrackingState, saveLastTrackingFetchAt, saveSharedInputs } from '@/lib/storage-api';
+import { TrackingResult } from '@/types/tracking';
 
 function formatLastQueryTime(timestamp: number): string {
 	return new Date(timestamp).toLocaleString('zh-CN', {
@@ -23,16 +24,7 @@ function formatLastQueryTime(timestamp: number): string {
 
 const App: React.FC = () => {
 	const [texts, setTexts] = useState<string[]>([]);
-	const [responses, setResponses] = useState<
-		{ data:
-			{
-				hisList: { toStatus: string; createDate: string }[],
-				wbInfo: {expressCode: string}
-			},
-			msg: string,
-			result: boolean
-		}[]
-	>([]);
+	const [responses, setResponses] = useState<TrackingResult[]>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [hasFirstData, setHasFirstData] = useState(false);
