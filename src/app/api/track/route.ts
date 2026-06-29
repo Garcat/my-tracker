@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+export const maxDuration = 60;
+
 const AUODO_ENDPOINT = 'https://sys-new-api.auodexpress.com/api/tms/userSys/client/getRouterList';
 
 export async function POST(request: NextRequest) {
