@@ -115,6 +115,9 @@ const App: React.FC = () => {
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({ wayBillCode: text }),
 				});
+				if (!response.ok) {
+					throw new Error(`Request failed: ${response.status}`);
+				}
 				const data = await response.json();
 				tmpList.push(data);
 				pendingCount--;
@@ -189,7 +192,7 @@ const App: React.FC = () => {
 								</div>
 							)}
 							<p className="text-center text-sm text-muted-foreground">
-								v26.05.11.13 • {texts.length} tracking numbers
+								v26.06.30 • {texts.length} tracking numbers
 							</p>
 						</CardContent>
 					</Card>

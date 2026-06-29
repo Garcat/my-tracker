@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const AUODO_ENDPOINT = 'http://sys-new-api.auodexpress.com/api/tms/userSys/client/getRouterList';
+const AUODO_ENDPOINT = 'https://sys-new-api.auodexpress.com/api/tms/userSys/client/getRouterList';
 
 export async function POST(request: NextRequest) {
   try {
