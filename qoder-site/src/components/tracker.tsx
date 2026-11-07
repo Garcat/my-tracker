@@ -1,0 +1,246 @@
+'use client';
+import React, { useEffect, useState } from 'react';
+import ResultList from '@/app/track/resultList';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Loader2 } from 'lucide-react';
+
+import { loadSharedTrackingState, saveLastTrackingFetchAt, saveSharedInputs } from '@/lib/storage-api';
+import { authHeaders } from '@/lib/auth-api';
+import { TrackingResult } from '@/types/tracking';
+
+function formatLastQueryTime(timestamp: number): string {
+	return new Date(timestamp).toLocaleString('zh-CN', {
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+		hour: '2-digit',
+		minute: '2-digit',
+		second: '2-digit',
+		hour12: false,
+	});
+}
+
+const App: React.FC = () => {
+	const [texts, setTexts] = useState<string[]>([]);
+	const [responses, setResponses] = useState<(TrackingResult | null)[]>([]);
+	const [error, setError] = useState<string | null>(null);
+	const [loading, setLoading] = useState(false);
+	const [hasFirstData, setHasFirstData] = useState(false);
+	const [count, setCount] = useState(0);
+	const [isLoading, setIsLoading] = useState(true);
+	const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
+
+	const endpoint = '/functions/v1/app/track';
+
+	// 从输入行中提取运单号：忽略号码后面以空格/Tab 分隔的地点等附加信息（如 "B0002807688	招商" -> "B0002807688"）
+	const extractWayBillCode = (text: string): string => {
+		return text.trim().split(/\s+/)[0] ?? '';
+	};
+
+	useEffect(() => {
+		// Load shared data from the site Function
+		const loadData = async () => {
+			try {
+				const { inputs, lastTrackingFetchAt } = await loadSharedTrackingState();
+				setTexts(inputs);
+				if (lastTrackingFetchAt !== null) {
+					setLastUpdatedAt(lastTrackingFetchAt);
+				}
+			} catch (error) {
+				console.error('Failed to load shared data:', error);
+				// Fallback to localStorage if the Function is unavailable
+				const storedPreviousInputs = localStorage.getItem('previousInputs');
+				if (storedPreviousInputs) {
+					setTexts(JSON.parse(storedPreviousInputs));
+				}
+			} finally {
+				setIsLoading(false);
+			}
+		};
+
+		loadData();
+	}, []);
+
+	const handleTextChange = (event: React.ChangeEvent<HTMLTextAreaElement>) => {
+		const text = event.target.value;
+		const lines = text.split('\n');
+		const previousLines = texts;
+
+		setTexts(lines);
+		// Save to the site database
+		saveSharedInputs(lines);
+
+		// Sync responses with texts array using reduce - maintain correspondence between trackNo and results
+		setResponses(prevResponses => {
+			return lines.reduce((newResponses, currentLine) => {
+				const previousIndex = previousLines.indexOf(currentLine);
+
+				// If this line existed in the previous input and we have a result for it
+				if (previousIndex !== -1 && previousIndex < prevResponses.length) {
+					newResponses.push(prevResponses[previousIndex]);
+				}
+
+				return newResponses;
+			}, [] as typeof prevResponses);
+		});
+	};
+
+	const fetchData = async () => {
+		try {
+			const tmpList: (TrackingResult | null)[] = [];
+			let pendingCount = texts.length;
+
+			// First pass: check which track numbers are already delivered
+			for (let i = 0; i < texts.length; i++) {
+				const text = texts[i];
+				const existingResult = responses[i];
+
+				// Skip blank lines: no way bill code to query, but keep a placeholder
+				// so that responses stays index-aligned with texts
+				const wayBillCode = extractWayBillCode(text);
+				if (!wayBillCode) {
+					tmpList.push(null);
+					pendingCount--;
+					setCount(pendingCount);
+					setResponses([...tmpList]);
+					continue;
+				}
+
+				// Check if this track number has a delivered result
+				if (existingResult && existingResult.data && existingResult.data.hisList && existingResult.data.hisList.length > 0) {
+					const status = JSON.stringify(existingResult.data.hisList[0].toStatus);
+					const isDelivered = status.includes('感谢使用');
+
+					if (isDelivered) {
+						// Keep the existing delivered result
+						tmpList.push(existingResult);
+						pendingCount--;
+						setCount(pendingCount);
+						setResponses([...tmpList]);
+						continue;
+					}
+				}
+
+				// Fetch data for non-delivered or new track numbers
+				const response = await fetch(endpoint, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json', ...authHeaders() },
+					body: JSON.stringify({ wayBillCode }),
+				});
+				if (!response.ok) {
+					throw new Error(`Request failed: ${response.status}`);
+				}
+				const data = await response.json();
+				tmpList.push(data);
+				pendingCount--;
+				setResponses([...tmpList]);
+				setCount(pendingCount);
+				setError(null);
+				setHasFirstData(true);
+			}
+			if (texts.some((line) => line.trim())) {
+				const now = Date.now();
+				setLastUpdatedAt(now);
+				await saveLastTrackingFetchAt(now);
+			}
+		} catch (error: unknown) {
+			setError(error instanceof Error ? error.message : 'Unknown errors');
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	const handleSubmit = () => {
+		setLoading(true);
+		setHasFirstData(false);
+		fetchData();
+	};
+
+	if (isLoading) {
+		return (
+			<div className="min-h-screen bg-background site-shell">
+				<div className="container mx-auto max-w-7xl">
+					<div className="flex items-center justify-center py-8">
+						<Loader2 className="h-8 w-8 animate-spin" />
+						<span className="ml-2">Loading shared data...</span>
+					</div>
+				</div>
+			</div>
+		);
+	}
+
+	return (
+		<div className="min-h-screen bg-background site-shell">
+			<div className="container mx-auto max-w-7xl">
+				<div className="grid grid-cols-1 md:grid-cols-3 site-grid">
+					<Card className="lg:col-span-1">
+						<CardHeader>
+							<CardTitle>Track Numbers</CardTitle>
+							<CardDescription>Enter tracking numbers to check their status</CardDescription>
+						</CardHeader>
+						<CardContent className="space-y-4">
+							<textarea
+								value={texts.join('\n')}
+								onChange={handleTextChange}
+								rows={15}
+								placeholder="Enter multiple lines of text..."
+								className="w-full p-3 border border-input rounded-md bg-background text-foreground resize-none focus:outline-none focus:ring-2 focus:ring-ring"
+							/>
+							<Button
+								onClick={handleSubmit}
+								disabled={loading}
+								className="w-full bg-[var(--site-accent)] hover:brightness-110 text-[var(--site-on-accent)]"
+							>
+								{loading ? (<span className="inline-flex items-center"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Fetching...</span>) : 'Submit'}
+							</Button>
+							{lastUpdatedAt !== null && (
+								<p className="text-center text-xs text-muted-foreground">
+									最后更新：{formatLastQueryTime(lastUpdatedAt)}
+								</p>
+							)}
+							{error && (
+								<div className="p-3 bg-destructive/10 border border-destructive/20 rounded-md">
+									<p className="text-destructive text-sm">Error: {error}</p>
+								</div>
+							)}
+							<p className="text-center text-sm text-muted-foreground">
+								v26.11.07 • {texts.length} tracking numbers
+							</p>
+						</CardContent>
+					</Card>
+
+					<Card className="md:col-span-2">
+						<CardHeader>
+							<CardTitle>Tracking Results</CardTitle>
+							<CardDescription>
+								{loading ? (
+									<span className="inline-flex items-center">
+										<Loader2 className="mr-2 h-4 w-4 animate-spin" /> {count > 0 ? `${count} updates left` : 'Updating...'}
+									</span>
+								) : `${texts.length} records updated.`}
+							</CardDescription>
+							{lastUpdatedAt !== null && (
+								<p className="text-xs text-muted-foreground mt-2">
+									最后一次查询：{formatLastQueryTime(lastUpdatedAt)}
+								</p>
+							)}
+						</CardHeader>
+						<CardContent>
+							{!hasFirstData && loading ? (
+								<div className="flex items-center justify-center py-8">
+									<div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+									<span className="ml-2">Loading...</span>
+								</div>
+							) : (
+								<ResultList trackNo={texts} results={responses} />
+							)}
+						</CardContent>
+					</Card>
+				</div>
+			</div>
+		</div>
+	);
+};
+
+export default App;

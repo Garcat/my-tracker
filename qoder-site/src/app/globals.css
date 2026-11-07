@@ -1,0 +1,155 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 222.2 47.4% 11.2%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222.2 84% 4.9%;
+    --radius: var(--site-radius);
+
+    /* Nudge design tokens (defaults preserve the original look) */
+    --site-bg: #ffffff;
+    --site-fg: #0f172a;
+    --site-accent: #2563eb;
+    --site-on-accent: #ffffff;
+    --site-surface: #ffffff;
+    --site-muted: #64748b;
+    --site-border: #e2e8f0;
+    --site-font: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+      "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
+    --site-radius: 0.5rem;
+    --site-space: 1;
+    --site-type: 1;
+    --site-motion: 1;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 210 40% 98%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
+
+    --site-bg: #020617;
+    --site-fg: #f8fafc;
+    --site-accent: #3b82f6;
+    --site-on-accent: #ffffff;
+    --site-surface: #0f172a;
+    --site-muted: #94a3b8;
+    --site-border: #1e293b;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    background-color: var(--site-bg);
+    color: var(--site-fg);
+    font-family: var(--site-font);
+  }
+}
+
+/* Theme surfaces consumed by the design workbench tokens */
+.bg-background {
+  background-color: var(--site-bg);
+}
+
+.bg-card {
+  background-color: var(--site-surface);
+}
+
+.text-card-foreground,
+.text-foreground {
+  color: var(--site-fg);
+}
+
+.text-muted-foreground {
+  color: var(--site-muted);
+}
+
+.border-border {
+  border-color: var(--site-border);
+}
+
+.border-input {
+  border-color: var(--site-border);
+}
+
+/* Spacing */
+.site-shell {
+  padding: calc(16px * var(--site-space, 1));
+}
+
+.site-grid {
+  gap: calc(24px * var(--site-space, 1));
+}
+
+.site-card-header {
+  padding: calc(24px * var(--site-space, 1));
+}
+
+.site-card-content {
+  padding: calc(24px * var(--site-space, 1));
+  padding-top: 0;
+}
+
+/* Typography */
+.site-title {
+  font-size: calc(1.5rem * var(--site-type, 1));
+  line-height: 1.15;
+}
+
+.site-body-copy {
+  font-size: calc(0.875rem * var(--site-type, 1));
+  line-height: 1.5;
+}
+
+/* Motion */
+.site-motion {
+  transition-duration: calc(180ms * var(--site-motion, 1));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-motion {
+    transition-duration: 1ms;
+  }
+
+  .animate-spin {
+    animation-duration: 2s;
+  }
+}

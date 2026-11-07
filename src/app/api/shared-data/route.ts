@@ -41,6 +41,8 @@ function getRedisClient() {
 // 数据类型定义
 interface SharedTrackingData {
   inputs: string[];
+  /** 最近一次 Submit 的查询结果，与 inputs 按下标对齐（可能为 null 占位） */
+  results: unknown[];
   lastUpdated: number;
   version: number;
   /** 最近一次 Submit 成功拉取物流的时间戳（毫秒） */
@@ -50,6 +52,7 @@ interface SharedTrackingData {
 // 默认数据结构
 const DEFAULT_DATA: SharedTrackingData = {
   inputs: [],
+  results: [],
   lastUpdated: Date.now(),
   version: 1,
   lastTrackingFetchAt: null,
@@ -60,6 +63,7 @@ function normalizeSharedData(raw: unknown): SharedTrackingData {
   const fetchAt = d.lastTrackingFetchAt;
   return {
     inputs: Array.isArray(d.inputs) ? d.inputs : [],
+    results: Array.isArray(d.results) ? d.results : [],
     lastUpdated: typeof d.lastUpdated === 'number' ? d.lastUpdated : Date.now(),
     version: typeof d.version === 'number' ? d.version : 1,
     lastTrackingFetchAt:
@@ -147,6 +151,7 @@ export async function GET() {
 
     return NextResponse.json({
       inputs: data.inputs || [],
+      results: data.results || [],
       lastUpdated: data.lastUpdated,
       version: data.version,
       lastTrackingFetchAt: data.lastTrackingFetchAt,
@@ -164,17 +169,19 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   try {
     const body = await request.json();
-    const { inputs, lastTrackingFetchAt } = body as {
+    const { inputs, results, lastTrackingFetchAt } = body as {
       inputs?: string[];
+      results?: unknown[];
       lastTrackingFetchAt?: number;
     };
 
     const hasInputs = inputs !== undefined;
+    const hasResults = results !== undefined;
     const hasFetchAt = lastTrackingFetchAt !== undefined;
 
-    if (!hasInputs && !hasFetchAt) {
+    if (!hasInputs && !hasResults && !hasFetchAt) {
       return NextResponse.json(
-        { error: 'Provide inputs and/or lastTrackingFetchAt' },
+        { error: 'Provide inputs, results and/or lastTrackingFetchAt' },
         { status: 400 }
       );
     }
@@ -182,6 +189,13 @@ export async function PUT(request: NextRequest) {
     if (hasInputs && !Array.isArray(inputs)) {
       return NextResponse.json(
         { error: 'Invalid inputs format' },
+        { status: 400 }
+      );
+    }
+
+    if (hasResults && !Array.isArray(results)) {
+      return NextResponse.json(
+        { error: 'Invalid results format' },
         { status: 400 }
       );
     }
@@ -202,6 +216,7 @@ export async function PUT(request: NextRequest) {
     // 更新数据
     const newData: SharedTrackingData = {
       inputs: hasInputs ? inputs! : existingData.inputs,
+      results: hasResults ? results! : existingData.results,
       lastUpdated: hasInputs ? Date.now() : existingData.lastUpdated,
       version: (existingData.version || 0) + 1,
       lastTrackingFetchAt: hasFetchAt

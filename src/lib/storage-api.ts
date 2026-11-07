@@ -5,8 +5,11 @@
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || '';
 
+import { TrackingResult } from '@/types/tracking';
+
 interface SharedData {
   inputs: string[];
+  results?: (TrackingResult | null)[];
   lastUpdated: number;
   version: number;
   lastTrackingFetchAt: number | null;
@@ -14,6 +17,7 @@ interface SharedData {
 
 export interface SharedTrackingState {
   inputs: string[];
+  results: (TrackingResult | null)[];
   lastTrackingFetchAt: number | null;
 }
 
@@ -47,7 +51,7 @@ function readFallbackLastFetchMs(): number | null {
   }
 }
 
-// 加载共享数据（单号列表 + 最后拉取时间）
+// 加载共享数据（单号列表 + 查询结果 + 最后拉取时间）
 export async function loadSharedTrackingState(): Promise<SharedTrackingState> {
   try {
     const response = await fetch(`${API_BASE_URL}/api/shared-data`);
@@ -63,13 +67,16 @@ export async function loadSharedTrackingState(): Promise<SharedTrackingState> {
         : null;
     return {
       inputs: data.inputs || [],
+      results: Array.isArray(data.results) ? data.results : [],
       lastTrackingFetchAt: fetchAt,
     };
   } catch (error) {
     console.error('Failed to load from API:', error);
+    const fallback = loadFallbackState();
     return {
-      inputs: loadFromLocalStorage(),
-      lastTrackingFetchAt: readFallbackLastFetchMs(),
+      inputs: fallback.inputs,
+      results: fallback.results,
+      lastTrackingFetchAt: fallback.lastTrackingFetchAt,
     };
   }
 }
@@ -97,7 +104,7 @@ export async function saveSharedInputs(inputs: string[]): Promise<void> {
 
     const result = await response.json();
 
-    // 同时保存到本地作为缓存
+    // 同时保存到本地作为缓存（保留已有查询结果）
     saveToLocalStorage(inputs, result.version);
 
     console.log('Data saved via API, version:', result.version);
@@ -105,6 +112,31 @@ export async function saveSharedInputs(inputs: string[]): Promise<void> {
     console.error('Failed to save via API:', error);
     // 降级到本地存储
     saveToLocalStorage(inputs);
+  }
+}
+
+// 保存查询结果（与 inputs 按下标对齐）
+export async function saveSharedResults(results: (TrackingResult | null)[]): Promise<void> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/shared-data`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ results }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    saveResultsToLocalStorage(results, result.version);
+
+    console.log('Results saved via API, version:', result.version);
+  } catch (error) {
+    console.error('Failed to save results via API:', error);
+    saveResultsToLocalStorage(results);
   }
 }
 
@@ -175,39 +207,84 @@ function loadFromLocalStorage(): string[] {
   }
 }
 
-function saveToLocalStorage(inputs: string[], version?: number): void {
+function readFallbackResults(): (TrackingResult | null)[] {
+  try {
+    const stored = localStorage.getItem('shared-api-fallback');
+    if (!stored) {
+      return [];
+    }
+    const parsed = JSON.parse(stored) as { results?: unknown };
+    return Array.isArray(parsed.results)
+      ? (parsed.results as (TrackingResult | null)[])
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+// 从本地降级缓存读取完整状态
+function loadFallbackState(): SharedTrackingState {
+  return {
+    inputs: loadFromLocalStorage(),
+    results: readFallbackResults(),
+    lastTrackingFetchAt: readFallbackLastFetchMs(),
+  };
+}
+
+// 读取已有降级缓存的根对象（失败时返回空对象）
+function readFallbackRaw(): Record<string, unknown> {
   try {
     const prevRaw = localStorage.getItem('shared-api-fallback');
-    let lastTrackingFetchAt: number | null = null;
-    if (prevRaw) {
-      try {
-        const p = JSON.parse(prevRaw) as { lastTrackingFetchAt?: unknown };
-        if (typeof p.lastTrackingFetchAt === 'number' && Number.isFinite(p.lastTrackingFetchAt)) {
-          lastTrackingFetchAt = p.lastTrackingFetchAt;
-        }
-      } catch {
-        // ignore
-      }
-    }
-    if (lastTrackingFetchAt === null) {
-      lastTrackingFetchAt = readLegacyLastFetchMs();
-    }
-    const payload: {
-      inputs: string[];
-      version: number;
-      cached: boolean;
-      lastTrackingFetchAt?: number;
-    } = {
+    return prevRaw ? (JSON.parse(prevRaw) as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+// 解析最后拉取时间（优先降级缓存，兼容旧字段）
+function resolveLastFetchMs(prev: Record<string, unknown>): number | null {
+  const raw = prev.lastTrackingFetchAt;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return raw;
+  }
+  return readLegacyLastFetchMs();
+}
+
+function saveToLocalStorage(inputs: string[], version?: number): void {
+  try {
+    const prev = readFallbackRaw();
+    const payload: Record<string, unknown> = {
+      ...prev,
       inputs,
       version: version || Date.now(),
       cached: true,
     };
+    const lastTrackingFetchAt = resolveLastFetchMs(prev);
     if (lastTrackingFetchAt !== null) {
       payload.lastTrackingFetchAt = lastTrackingFetchAt;
     }
     localStorage.setItem('shared-api-fallback', JSON.stringify(payload));
   } catch (error) {
     console.error('Failed to save to localStorage:', error);
+  }
+}
+
+function saveResultsToLocalStorage(results: (TrackingResult | null)[], version?: number): void {
+  try {
+    const prev = readFallbackRaw();
+    const payload: Record<string, unknown> = {
+      ...prev,
+      results,
+      version: version || Date.now(),
+      cached: true,
+    };
+    const lastTrackingFetchAt = resolveLastFetchMs(prev);
+    if (lastTrackingFetchAt !== null) {
+      payload.lastTrackingFetchAt = lastTrackingFetchAt;
+    }
+    localStorage.setItem('shared-api-fallback', JSON.stringify(payload));
+  } catch (error) {
+    console.error('Failed to save results to localStorage:', error);
   }
 }
 

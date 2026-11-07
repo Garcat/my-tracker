@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>订阅更新演示</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .user { margin: 20px; padding: 20px; border: 2px solid #ccc; border-radius: 10px; }
+        .user.active { border-color: #007bff; background: #f8f9fa; }
+        .input-section { margin: 10px 0; }
+        textarea { width: 100%; min-height: 100px; }
+        button { background: #007bff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .data-display { margin: 10px 0; padding: 10px; background: #f8f9fa; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <h1>多用户共享数据演示</h1>
+    <p>打开多个浏览器标签页来模拟多用户场景</p>
+
+    <div class="user" id="user1">
+        <h2>用户 1 (当前标签页)</h2>
+        <div class="input-section">
+            <label>跟踪单号:</label><br>
+            <textarea id="input1" placeholder="每行一个跟踪单号"></textarea><br>
+            <button onclick="updateData(1)">更新数据</button>
+        </div>
+        <div class="data-display">
+            <strong>当前数据:</strong> <span id="data1">[]</span>
+        </div>
+        <div class="data-display">
+            <strong>最后更新:</strong> <span id="time1">-</span>
+        </div>
+    </div>
+
+    <script>
+        // 模拟共享存储
+        let sharedData = [];
+        let lastUpdate = Date.now();
+
+        // 模拟其他用户的更新
+        function simulateOtherUserUpdate() {
+            const mockData = [
+                'TRACK001',
+                'TRACK002',
+                'TRACK003',
+                'TRACK' + Math.floor(Math.random() * 1000)
+            ];
+
+            sharedData = mockData;
+            lastUpdate = Date.now();
+
+            // 通知所有监听器
+            notifySubscribers(sharedData);
+
+            console.log('其他用户更新了数据:', sharedData);
+        }
+
+        // 订阅者列表
+        const subscribers = [];
+
+        // 订阅更新
+        function subscribeToUpdates(callback) {
+            subscribers.push(callback);
+            return () => {
+                const index = subscribers.indexOf(callback);
+                if (index > -1) subscribers.splice(index, 1);
+            };
+        }
+
+        // 通知所有订阅者
+        function notifySubscribers(data) {
+            subscribers.forEach(callback => callback(data));
+        }
+
+        // 更新数据
+        function updateData(userId) {
+            const textarea = document.getElementById(`input${userId}`);
+            const lines = textarea.value.split('\n').filter(line => line.trim());
+
+            sharedData = [...lines];
+            lastUpdate = Date.now();
+
+            // 通知所有订阅者（包括当前用户）
+            notifySubscribers(sharedData);
+
+            console.log(`用户${userId}更新了数据:`, sharedData);
+        }
+
+        // 订阅共享数据更新
+        subscribeToUpdates((newData) => {
+            // 更新UI显示
+            document.getElementById('data1').textContent = JSON.stringify(newData, null, 2);
+            document.getElementById('time1').textContent = new Date().toLocaleTimeString();
+
+            // 更新输入框（如果数据有变化）
+            const currentInput = document.getElementById('input1').value;
+            const newInput = newData.join('\n');
+            if (currentInput !== newInput) {
+                document.getElementById('input1').value = newInput;
+            }
+        });
+
+        // 模拟其他用户定期更新
+        setInterval(() => {
+            if (Math.random() < 0.3) { // 30%概率触发更新
+                simulateOtherUserUpdate();
+            }
+        }, 5000);
+
+        // 初始化显示
+        document.getElementById('data1').textContent = JSON.stringify(sharedData, null, 2);
+        document.getElementById('time1').textContent = new Date().toLocaleTimeString();
+    </script>
+</body>
+</html>

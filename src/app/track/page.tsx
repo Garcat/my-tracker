@@ -7,7 +7,7 @@ import { Loader2 } from 'lucide-react';
 // 当前使用的存储方案：服务器端 API (Next.js API Routes + 文件系统)
 // 这个方案提供真正的服务器端持久化，数据在重启/部署后依然保留
 
-import { loadSharedTrackingState, saveLastTrackingFetchAt, saveSharedInputs } from '@/lib/storage-api';
+import { loadSharedTrackingState, saveLastTrackingFetchAt, saveSharedInputs, saveSharedResults } from '@/lib/storage-api';
 import { TrackingResult } from '@/types/tracking';
 
 function formatLastQueryTime(timestamp: number): string {
@@ -43,8 +43,13 @@ const App: React.FC = () => {
 		// Load shared data from server
 		const loadData = async () => {
 			try {
-				const { inputs, lastTrackingFetchAt } = await loadSharedTrackingState();
+				const { inputs, results, lastTrackingFetchAt } = await loadSharedTrackingState();
 				setTexts(inputs);
+				// Restore the last query results so they show on open
+				setResponses(results);
+				if (results.some((r) => r !== null)) {
+					setHasFirstData(true);
+				}
 				if (lastTrackingFetchAt !== null) {
 					setLastUpdatedAt(lastTrackingFetchAt);
 				}
@@ -75,18 +80,20 @@ const App: React.FC = () => {
 		saveSharedInputs(lines);
 
 		// Sync responses with texts array using reduce - maintain correspondence between trackNo and results
-		setResponses(prevResponses => {
-			return lines.reduce((newResponses, currentLine) => {
-				const previousIndex = previousLines.indexOf(currentLine);
+		const nextResponses = lines.reduce((newResponses, currentLine) => {
+			const previousIndex = previousLines.indexOf(currentLine);
 
-				// If this line existed in the previous input and we have a result for it
-				if (previousIndex !== -1 && previousIndex < prevResponses.length) {
-					newResponses.push(prevResponses[previousIndex]);
-				}
+			// If this line existed in the previous input and we have a result for it
+			if (previousIndex !== -1 && previousIndex < responses.length) {
+				newResponses.push(responses[previousIndex]);
+			}
 
-				return newResponses;
-			}, [] as typeof prevResponses);
-		});
+			return newResponses;
+		}, [] as (TrackingResult | null)[]);
+
+		setResponses(nextResponses);
+		// Persist the re-aligned results so a reload keeps inputs and results in sync
+		saveSharedResults(nextResponses);
 	};
 
 	const fetchData = async () => {
@@ -145,7 +152,7 @@ const App: React.FC = () => {
 			if (texts.some((line) => line.trim())) {
 				const now = Date.now();
 				setLastUpdatedAt(now);
-				await saveLastTrackingFetchAt(now);
+				await Promise.all([saveLastTrackingFetchAt(now), saveSharedResults(tmpList)]);
 			}
 		} catch (error: unknown) {
 			setError(error instanceof Error ? error.message : 'Unknown errors');
@@ -195,7 +202,7 @@ const App: React.FC = () => {
 								disabled={loading}
 								className="w-full bg-blue-600 hover:bg-blue-700 text-white"
 							>
-								{loading ? (<span className="inline-flex items-center"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Fetching...</span>) : 'Submit'}
+								{loading ? (<span className="inline-flex items-center"><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Fetching...</span>) : 'Update'}
 							</Button>
 							{lastUpdatedAt !== null && (
 								<p className="text-center text-xs text-muted-foreground">
