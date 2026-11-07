@@ -140,6 +140,37 @@ export async function saveSharedResults(results: (TrackingResult | null)[]): Pro
   }
 }
 
+// 原子保存一次查询快照：同时写入 results 和 lastTrackingFetchAt，
+// 避免与单独的时间/结果 PUT 并发时发生读-改-写覆盖丢失。
+export async function saveTrackingSnapshot(
+  results: (TrackingResult | null)[],
+  timestamp: number,
+): Promise<void> {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/shared-data`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ results, lastTrackingFetchAt: timestamp }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    localStorage.setItem('lastTrackingFetchAt', String(timestamp));
+    saveResultsToLocalStorage(results, result.version, timestamp);
+
+    console.log('Tracking snapshot saved via API, version:', result.version);
+  } catch (error) {
+    console.error('Failed to save tracking snapshot via API:', error);
+    localStorage.setItem('lastTrackingFetchAt', String(timestamp));
+    saveResultsToLocalStorage(results, undefined, timestamp);
+  }
+}
+
 /** 将「最后成功拉取物流」时间同步到服务器 */
 export async function saveLastTrackingFetchAt(timestamp: number): Promise<void> {
   try {
@@ -269,7 +300,11 @@ function saveToLocalStorage(inputs: string[], version?: number): void {
   }
 }
 
-function saveResultsToLocalStorage(results: (TrackingResult | null)[], version?: number): void {
+function saveResultsToLocalStorage(
+  results: (TrackingResult | null)[],
+  version?: number,
+  timestamp?: number,
+): void {
   try {
     const prev = readFallbackRaw();
     const payload: Record<string, unknown> = {
@@ -278,7 +313,7 @@ function saveResultsToLocalStorage(results: (TrackingResult | null)[], version?:
       version: version || Date.now(),
       cached: true,
     };
-    const lastTrackingFetchAt = resolveLastFetchMs(prev);
+    const lastTrackingFetchAt = timestamp ?? resolveLastFetchMs(prev);
     if (lastTrackingFetchAt !== null) {
       payload.lastTrackingFetchAt = lastTrackingFetchAt;
     }

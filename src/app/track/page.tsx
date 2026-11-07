@@ -7,7 +7,7 @@ import { Loader2 } from 'lucide-react';
 // 当前使用的存储方案：服务器端 API (Next.js API Routes + 文件系统)
 // 这个方案提供真正的服务器端持久化，数据在重启/部署后依然保留
 
-import { loadSharedTrackingState, saveLastTrackingFetchAt, saveSharedInputs, saveSharedResults } from '@/lib/storage-api';
+import { loadSharedTrackingState, saveSharedInputs, saveSharedResults, saveTrackingSnapshot } from '@/lib/storage-api';
 import { TrackingResult } from '@/types/tracking';
 
 function formatLastQueryTime(timestamp: number): string {
@@ -152,7 +152,7 @@ const App: React.FC = () => {
 			if (texts.some((line) => line.trim())) {
 				const now = Date.now();
 				setLastUpdatedAt(now);
-				await Promise.all([saveLastTrackingFetchAt(now), saveSharedResults(tmpList)]);
+				await saveTrackingSnapshot(tmpList, now);
 			}
 		} catch (error: unknown) {
 			setError(error instanceof Error ? error.message : 'Unknown errors');
