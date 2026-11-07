@@ -24,7 +24,7 @@ function formatLastQueryTime(timestamp: number): string {
 
 const App: React.FC = () => {
 	const [texts, setTexts] = useState<string[]>([]);
-	const [responses, setResponses] = useState<TrackingResult[]>([]);
+	const [responses, setResponses] = useState<(TrackingResult | null)[]>([]);
 	const [error, setError] = useState<string | null>(null);
 	const [loading, setLoading] = useState(false);
 	const [hasFirstData, setHasFirstData] = useState(false);
@@ -33,6 +33,11 @@ const App: React.FC = () => {
 	const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
 
 	const endpoint = '/api/track';
+
+	// 从输入行中提取运单号：忽略号码后面以空格/Tab 分隔的地点等附加信息（如 "B0002807688	招商" -> "B0002807688"）
+	const extractWayBillCode = (text: string): string => {
+		return text.trim().split(/\s+/)[0] ?? '';
+	};
 
 	useEffect(() => {
 		// Load shared data from server
@@ -86,7 +91,7 @@ const App: React.FC = () => {
 
 	const fetchData = async () => {
 		try {
-			const tmpList = [];
+			const tmpList: (TrackingResult | null)[] = [];
 			let pendingCount = texts.length;
 			
 			// First pass: check which track numbers are already delivered
@@ -94,6 +99,17 @@ const App: React.FC = () => {
 				const text = texts[i];
 				const existingResult = responses[i];
 				
+				// Skip blank lines: no way bill code to query, but keep a placeholder
+				// so that responses stays index-aligned with texts
+				const wayBillCode = extractWayBillCode(text);
+				if (!wayBillCode) {
+					tmpList.push(null);
+					pendingCount--;
+					setCount(pendingCount);
+					setResponses([...tmpList]);
+					continue;
+				}
+
 				// Check if this track number has a delivered result
 				if (existingResult && existingResult.data && existingResult.data.hisList && existingResult.data.hisList.length > 0) {
 					const status = JSON.stringify(existingResult.data.hisList[0].toStatus);
@@ -113,7 +129,7 @@ const App: React.FC = () => {
 				const response = await fetch(endpoint, {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ wayBillCode: text }),
+					body: JSON.stringify({ wayBillCode }),
 				});
 				if (!response.ok) {
 					throw new Error(`Request failed: ${response.status}`);

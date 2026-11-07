@@ -2,7 +2,7 @@ import { TrackingResult } from '@/types/tracking';
 
 interface Props {
     trackNo: string[];
-    results: TrackingResult[];
+    results: (TrackingResult | null)[];
 }
 
 const ResultList = ({trackNo, results}: Props) => {
