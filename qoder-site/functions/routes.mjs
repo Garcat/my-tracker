@@ -1,10 +1,19 @@
 const AUODO_ENDPOINT =
   'https://sys-new-api.auodexpress.com/api/tms/userSys/client/getRouterList';
 const MAX_INPUT_BYTES = 4096;
-const MAX_STATE_BYTES = 300 * 1024;
+const MAX_STATE_BYTES = 2 * 1024 * 1024;
 const MAX_INPUTS = 1000;
+const MAX_RESULTS = 1000;
+const MAX_PARCELS = 2000;
 const MAX_LINE_LENGTH = 200;
 const MAX_WAYBILL_LENGTH = 100;
+const MAX_PARCEL_TEXT = 500;
+const PARCEL_FIELDS = ['content', 'address', 'expressCode', 'status', 'eta'];
+
+// 运单号 = 输入行首个空格/Tab 前的部分（"B0002807688\t招商" -> "B0002807688"）
+function wayBillOf(line) {
+  return typeof line === 'string' ? line.trim().split(/\s+/)[0] : '';
+}
 
 // The page is publicly reachable; all business routes require this session.
 const ACCESS_PASSWORD_SHA256 =
@@ -291,6 +300,8 @@ export function application({ store, BackendError }) {
         const state = await loadState();
         return Response.json({
           inputs: state.inputs,
+          results: state.results,
+          parcels: state.parcels,
           lastUpdated: state.lastUpdated,
           version: state.version,
           lastTrackingFetchAt: state.lastTrackingFetchAt,
@@ -304,11 +315,15 @@ export function application({ store, BackendError }) {
         }
 
         const hasInputs = Object.prototype.hasOwnProperty.call(body, 'inputs');
+        const hasResults = Object.prototype.hasOwnProperty.call(body, 'results');
+        const hasParcels = Object.prototype.hasOwnProperty.call(body, 'parcels');
         const hasFetchAt = Object.prototype.hasOwnProperty.call(
           body,
           'lastTrackingFetchAt',
         );
-        if (!hasInputs && !hasFetchAt) fail('invalid_input', 400);
+        if (!hasInputs && !hasResults && !hasParcels && !hasFetchAt) {
+          fail('invalid_input', 400);
+        }
 
         let nextInputs;
         if (hasInputs) {
@@ -321,6 +336,22 @@ export function application({ store, BackendError }) {
             }
           }
           nextInputs = body.inputs;
+        }
+
+        let nextResults;
+        if (hasResults) {
+          if (!Array.isArray(body.results) || body.results.length > MAX_RESULTS) {
+            fail('invalid_input', 400);
+          }
+          for (const item of body.results) {
+            if (
+              item !== null &&
+              (typeof item !== 'object' || Array.isArray(item))
+            ) {
+              fail('invalid_input', 400);
+            }
+          }
+          nextResults = body.results;
         }
 
         let nextFetchAt;
@@ -336,11 +367,62 @@ export function application({ store, BackendError }) {
           nextFetchAt = value;
         }
 
+        let incomingParcels;
+        if (hasParcels) {
+          const raw = body.parcels;
+          if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+            fail('invalid_input', 400);
+          }
+          const entries = Object.entries(raw);
+          if (entries.length > MAX_PARCELS) fail('invalid_input', 400);
+          incomingParcels = {};
+          for (const [code, value] of entries) {
+            if (
+              typeof code !== 'string' ||
+              !code ||
+              code.length > MAX_WAYBILL_LENGTH
+            ) {
+              fail('invalid_input', 400);
+            }
+            if (!value || typeof value !== 'object' || Array.isArray(value)) {
+              fail('invalid_input', 400);
+            }
+            const parcel = {};
+            for (const field of PARCEL_FIELDS) {
+              const text = value[field];
+              if (text === undefined || text === null) continue;
+              if (typeof text !== 'string' || text.length > MAX_PARCEL_TEXT) {
+                fail('invalid_input', 400);
+              }
+              parcel[field] = text;
+            }
+            incomingParcels[code] = parcel;
+          }
+        }
+
         const current = await loadState();
         const now = Date.now();
+        const effectiveInputs = hasInputs ? nextInputs : current.inputs;
+
+        // 运单号是包裹信息的唯一键：只保留仍在输入列表中的运单，
+        // 删除某行运单号时其包裹信息随之删除。
+        const allowed = new Set(
+          (effectiveInputs || []).map(wayBillOf).filter(Boolean),
+        );
+        const mergedParcels = {
+          ...(current.parcels || {}),
+          ...(hasParcels ? incomingParcels : {}),
+        };
+        const nextParcels = {};
+        for (const [code, parcel] of Object.entries(mergedParcels)) {
+          if (allowed.has(code)) nextParcels[code] = parcel;
+        }
+
         const next = {
           exists: current.exists,
-          inputs: hasInputs ? nextInputs : current.inputs,
+          inputs: effectiveInputs,
+          results: hasResults ? nextResults : current.results,
+          parcels: nextParcels,
           version: current.version + 1,
           lastUpdated: hasInputs ? now : current.lastUpdated,
           lastTrackingFetchAt: hasFetchAt

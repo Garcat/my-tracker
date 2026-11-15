@@ -26,6 +26,50 @@ function normalizeInputs(value) {
   return candidate.filter((line) => typeof line === 'string');
 }
 
+function normalizeResults(value) {
+  let candidate = value;
+  if (typeof candidate === 'string') {
+    try {
+      candidate = JSON.parse(candidate);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(candidate)) return [];
+  return candidate.map((item) =>
+    item === null || (typeof item === 'object' && !Array.isArray(item))
+      ? item
+      : null,
+  );
+}
+
+function normalizeParcels(value) {
+  let candidate = value;
+  if (typeof candidate === 'string') {
+    try {
+      candidate = JSON.parse(candidate);
+    } catch {
+      return {};
+    }
+  }
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    return {};
+  }
+  const parcels = {};
+  for (const [code, parcel] of Object.entries(candidate)) {
+    if (
+      typeof code === 'string' &&
+      code &&
+      parcel &&
+      typeof parcel === 'object' &&
+      !Array.isArray(parcel)
+    ) {
+      parcels[code] = parcel;
+    }
+  }
+  return parcels;
+}
+
 /**
  * Single-row shared state store backed by the site database.
  * Business errors are surfaced as throws; routes.mjs maps them to safe codes.
@@ -35,7 +79,9 @@ export function createStateStore(db) {
     async read() {
       const result = await db
         .from(TABLE)
-        .select('inputs,version,last_updated,last_tracking_fetch_at')
+        .select(
+          'inputs,results,parcels,version,last_updated,last_tracking_fetch_at',
+        )
         .eq('id', ROW_ID)
         .limit(1);
 
@@ -45,6 +91,8 @@ export function createStateStore(db) {
       return {
         exists: Boolean(row),
         inputs: normalizeInputs(row?.inputs),
+        results: normalizeResults(row?.results),
+        parcels: normalizeParcels(row?.parcels),
         version: Number.isInteger(row?.version) ? row.version : 0,
         lastUpdated: toMs(row?.last_updated) ?? Date.now(),
         lastTrackingFetchAt: toMs(row?.last_tracking_fetch_at),
@@ -54,6 +102,8 @@ export function createStateStore(db) {
     async write(state) {
       const values = {
         inputs: state.inputs,
+        results: state.results,
+        parcels: state.parcels ?? {},
         version: state.version,
         last_updated: toIso(state.lastUpdated) ?? new Date().toISOString(),
         last_tracking_fetch_at: toIso(state.lastTrackingFetchAt),

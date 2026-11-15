@@ -69,11 +69,17 @@ const rows = [];
 const store = createStateStore(memoryDb(rows));
 
 const empty = await store.read();
-check('empty read', empty.exists === false && empty.version === 0, empty);
+check(
+  'empty read',
+  empty.exists === false && empty.version === 0 && Object.keys(empty.parcels).length === 0,
+  empty,
+);
 
 const firstVersion = await store.write({
   exists: empty.exists,
   inputs: ['A'],
+  results: [],
+  parcels: {},
   version: 1,
   lastUpdated: Date.now(),
   lastTrackingFetchAt: null,
@@ -92,6 +98,8 @@ check(
 const secondVersion = await store.write({
   exists: afterFirst.exists,
   inputs: ['A', 'B'],
+  results: [{ result: true, data: { hisList: [] } }, null],
+  parcels: { A: { content: '鞋子', address: '招商', expressCode: 'EWE123', status: '已签收' } },
   version: 2,
   lastUpdated: Date.now(),
   lastTrackingFetchAt: 1762460000000,
@@ -103,8 +111,29 @@ check(
   'read after update',
   afterSecond.version === 2 &&
     afterSecond.inputs.length === 2 &&
+    Array.isArray(afterSecond.results) &&
+    afterSecond.results.length === 2 &&
+    afterSecond.results[1] === null &&
+    afterSecond.parcels.A?.content === '鞋子' &&
+    afterSecond.parcels.A?.address === '招商' &&
     afterSecond.lastTrackingFetchAt === 1762460000000,
   afterSecond,
+);
+
+const clearedVersion = await store.write({
+  exists: afterSecond.exists,
+  inputs: ['A', 'B'],
+  results: afterSecond.results,
+  parcels: {},
+  version: 3,
+  lastUpdated: Date.now(),
+  lastTrackingFetchAt: afterSecond.lastTrackingFetchAt,
+});
+const afterCleared = await store.read();
+check(
+  'parcels can be emptied',
+  clearedVersion === 3 && Object.keys(afterCleared.parcels).length === 0,
+  afterCleared,
 );
 
 if (failures.length > 0) {

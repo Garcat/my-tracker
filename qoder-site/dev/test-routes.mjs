@@ -11,6 +11,8 @@ class BackendError extends Error {
 function memoryStore(initial) {
   let state = initial ?? {
     inputs: [],
+    results: [],
+    parcels: {},
     version: 0,
     lastUpdated: Date.now(),
     lastTrackingFetchAt: null,
@@ -103,7 +105,13 @@ const bearerFallback = await call('GET', '/functions/v1/app/shared-data', undefi
 check('bearer header accepted', bearerFallback.status === 200, bearerFallback);
 
 const empty = await call('GET', '/functions/v1/app/shared-data', undefined, authorized);
-check('GET empty shared state', empty.status === 200 && Array.isArray(empty.body.inputs), empty);
+check(
+  'GET empty shared state',
+  empty.status === 200 &&
+    Array.isArray(empty.body.inputs) &&
+    Array.isArray(empty.body.results),
+  empty,
+);
 
 const saved = await call(
   'PUT',
@@ -143,6 +151,134 @@ check(
     afterFetchAt.body.inputs.length === 2,
   afterFetchAt,
 );
+
+const snapshotResults = [
+  { result: true, data: { hisList: [{ toStatus: '已签收' }] } },
+  null,
+];
+const snapshot = await call(
+  'PUT',
+  '/functions/v1/app/shared-data',
+  { results: snapshotResults, lastTrackingFetchAt: fetchAt },
+  jsonAuthorized,
+);
+check(
+  'PUT tracking snapshot',
+  snapshot.status === 200 && snapshot.body.version === 3,
+  snapshot,
+);
+
+const afterSnapshot = await call('GET', '/functions/v1/app/shared-data', undefined, authorized);
+check(
+  'results restored with inputs',
+  afterSnapshot.status === 200 &&
+    afterSnapshot.body.results.length === 2 &&
+    afterSnapshot.body.results[0]?.data?.hisList?.[0]?.toStatus === '已签收' &&
+    afterSnapshot.body.results[1] === null &&
+    afterSnapshot.body.inputs.length === 2,
+  afterSnapshot,
+);
+
+const inputsOnly = await call(
+  'PUT',
+  '/functions/v1/app/shared-data',
+  { inputs: ['TEST001', 'TEST002', 'TEST003'] },
+  jsonAuthorized,
+);
+check('PUT inputs after snapshot', inputsOnly.status === 200 && inputsOnly.body.version === 4, inputsOnly);
+
+const afterInputsOnly = await call('GET', '/functions/v1/app/shared-data', undefined, authorized);
+check(
+  'inputs-only PUT preserves results',
+  afterInputsOnly.status === 200 &&
+    afterInputsOnly.body.results.length === 2 &&
+    afterInputsOnly.body.results[0]?.data?.hisList?.[0]?.toStatus === '已签收',
+  afterInputsOnly,
+);
+
+const parcelsSaved = await call(
+  'PUT',
+  '/functions/v1/app/shared-data',
+  {
+    parcels: {
+      TEST001: { content: '鞋子', address: '招商', expressCode: 'EWE1', status: '已签收', eta: '11.14' },
+      TEST003: { content: '奶粉' },
+      NOT_IN_INPUTS: { content: '应被丢弃' },
+    },
+  },
+  jsonAuthorized,
+);
+check('PUT parcels', parcelsSaved.status === 200 && parcelsSaved.body.version === 5, parcelsSaved);
+
+const afterParcels = await call('GET', '/functions/v1/app/shared-data', undefined, authorized);
+check(
+  'parcels keyed by waybill, unknown keys dropped',
+  afterParcels.status === 200 &&
+    afterParcels.body.parcels.TEST001?.content === '鞋子' &&
+    afterParcels.body.parcels.TEST001?.expressCode === 'EWE1' &&
+    afterParcels.body.parcels.TEST001?.eta === '11.14' &&
+    afterParcels.body.parcels.TEST003?.content === '奶粉' &&
+    afterParcels.body.parcels.NOT_IN_INPUTS === undefined &&
+    afterParcels.body.results.length === 2,
+  afterParcels,
+);
+
+const removeInput = await call(
+  'PUT',
+  '/functions/v1/app/shared-data',
+  { inputs: ['TEST001'] },
+  jsonAuthorized,
+);
+check('remove a waybill', removeInput.status === 200 && removeInput.body.version === 6, removeInput);
+
+const afterRemove = await call('GET', '/functions/v1/app/shared-data', undefined, authorized);
+check(
+  'deleting a waybill deletes its parcel',
+  afterRemove.status === 200 &&
+    afterRemove.body.parcels.TEST001?.content === '鞋子' &&
+    afterRemove.body.parcels.TEST003 === undefined &&
+    afterRemove.body.inputs.length === 1,
+  afterRemove,
+);
+
+const parcelWithLocation = await call(
+  'PUT',
+  '/functions/v1/app/shared-data',
+  { inputs: ['TEST001\t招商', 'TEST003 奶粉'] },
+  jsonAuthorized,
+);
+check('inputs with trailing notes', parcelWithLocation.status === 200, parcelWithLocation);
+
+const afterLocation = await call('GET', '/functions/v1/app/shared-data', undefined, authorized);
+check(
+  'waybill extracted before whitespace',
+  afterLocation.status === 200 && afterLocation.body.parcels.TEST001?.content === '鞋子',
+  afterLocation,
+);
+
+const invalidParcels = await call(
+  'PUT',
+  '/functions/v1/app/shared-data',
+  { parcels: 'nope' },
+  jsonAuthorized,
+);
+check('rejects invalid parcels', invalidParcels.status === 400, invalidParcels);
+
+const invalidParcelField = await call(
+  'PUT',
+  '/functions/v1/app/shared-data',
+  { parcels: { TEST001: { content: 42 } } },
+  jsonAuthorized,
+);
+check('rejects non-string parcel field', invalidParcelField.status === 400, invalidParcelField);
+
+const invalidResults = await call(
+  'PUT',
+  '/functions/v1/app/shared-data',
+  { results: [1] },
+  jsonAuthorized,
+);
+check('rejects invalid results', invalidResults.status === 400, invalidResults);
 
 const invalid = await call(
   'PUT',
