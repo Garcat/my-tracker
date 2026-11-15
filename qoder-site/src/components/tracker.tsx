@@ -60,6 +60,17 @@ const App: React.FC = () => {
 	const [count, setCount] = useState(0);
 	const [isLoading, setIsLoading] = useState(true);
 	const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
+	const [refreshingIndex, setRefreshingIndex] = useState<number | null>(null);
+
+	// 始终持有最新的 texts/responses/errors，供单条刷新回调读取，避免闭包过期
+	const textsRef = useRef(texts);
+	const responsesRef = useRef(responses);
+	const errorsRef = useRef(errors);
+	useEffect(() => {
+		textsRef.current = texts;
+		responsesRef.current = responses;
+		errorsRef.current = errors;
+	}, [texts, responses, errors]);
 
 	const endpoint = '/functions/v1/app/track';
 
@@ -294,6 +305,53 @@ const App: React.FC = () => {
 		void fetchData();
 	};
 
+	// 单条刷新：只重新查询指定下标对应的运单号并更新该条结果
+	const handleRefreshOne = useCallback(async (index: number) => {
+		if (refreshingIndex !== null) return;
+		const wayBillCode = extractWayBillCode(textsRef.current[index] ?? '');
+		if (!wayBillCode) return;
+		// 与批量查询互斥，取消待执行的防抖写避免旧快照覆盖刷新结果
+		cancelPendingSave();
+		setRefreshingIndex(index);
+		setError(null);
+		try {
+			const response = await fetch(endpoint, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json', ...authHeaders() },
+				body: JSON.stringify({ wayBillCode }),
+			});
+			if (!response.ok) {
+				throw new Error(`HTTP ${response.status}`);
+			}
+			const data = (await response.json()) as TrackingResult;
+			const nextResponses = [...responsesRef.current];
+			const nextErrors = [...errorsRef.current];
+			while (nextResponses.length <= index) {
+				nextResponses.push(null);
+				nextErrors.push(null);
+			}
+			nextResponses[index] = data;
+			nextErrors[index] = null;
+			setResponses(nextResponses);
+			setErrors(nextErrors);
+			setHasFirstData(true);
+			const now = Date.now();
+			setLastUpdatedAt(now);
+			await saveTrackingSnapshot(textsRef.current, nextResponses, now);
+		} catch (err: unknown) {
+			// 失败时保留该行旧结果，错误写入对应行
+			const nextErrors = [...errorsRef.current];
+			while (nextErrors.length <= index) {
+				nextErrors.push(null);
+			}
+			nextErrors[index] = err instanceof Error ? err.message : '查询失败';
+			setErrors(nextErrors);
+			setError(`${wayBillCode} 刷新失败，原状态保留`);
+		} finally {
+			setRefreshingIndex(null);
+		}
+	}, [refreshingIndex, cancelPendingSave]);
+
 	if (isLoading) {
 		return (
 			<div className="min-h-screen bg-background site-shell">
@@ -371,7 +429,16 @@ const App: React.FC = () => {
 									<span className="ml-2">Loading...</span>
 								</div>
 							) : (
-								<ResultList trackNo={texts} results={responses} errors={errors} parcels={parcels} onSaveParcel={handleSaveParcel} />
+								<ResultList
+									trackNo={texts}
+									results={responses}
+									errors={errors}
+									parcels={parcels}
+									onSaveParcel={handleSaveParcel}
+									onRefresh={handleRefreshOne}
+									refreshingIndexes={refreshingIndex !== null ? new Set([refreshingIndex]) : undefined}
+									disabled={loading}
+								/>
 							)}
 						</CardContent>
 					</Card>

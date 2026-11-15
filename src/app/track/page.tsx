@@ -1,5 +1,5 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import ResultList from './resultList';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,6 +31,15 @@ const App: React.FC = () => {
 	const [count, setCount] = useState(0);
 	const [isLoading, setIsLoading] = useState(true);
 	const [lastUpdatedAt, setLastUpdatedAt] = useState<number | null>(null);
+	const [refreshingIndex, setRefreshingIndex] = useState<number | null>(null);
+
+	// 始终持有最新的 texts/responses，供单条刷新回调读取，避免闭包过期
+	const textsRef = useRef(texts);
+	const responsesRef = useRef(responses);
+	useEffect(() => {
+		textsRef.current = texts;
+		responsesRef.current = responses;
+	}, [texts, responses]);
 
 	const endpoint = '/api/track';
 
@@ -167,6 +176,40 @@ const App: React.FC = () => {
 		fetchData();
 	};
 
+	// 单条刷新：只重新查询指定下标对应的运单号并更新该条结果
+	const handleRefreshOne = useCallback(async (index: number) => {
+		if (refreshingIndex !== null) return;
+		const wayBillCode = extractWayBillCode(textsRef.current[index] ?? '');
+		if (!wayBillCode) return;
+		setRefreshingIndex(index);
+		setError(null);
+		try {
+			const response = await fetch(endpoint, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ wayBillCode }),
+			});
+			if (!response.ok) {
+				throw new Error(`Request failed: ${response.status}`);
+			}
+			const data: TrackingResult = await response.json();
+			const nextResponses = [...responsesRef.current];
+			while (nextResponses.length < index) {
+				nextResponses.push(null);
+			}
+			nextResponses[index] = data;
+			setResponses(nextResponses);
+			setHasFirstData(true);
+			const now = Date.now();
+			setLastUpdatedAt(now);
+			await saveTrackingSnapshot(nextResponses, now);
+		} catch (error: unknown) {
+			setError(error instanceof Error ? error.message : 'Unknown errors');
+		} finally {
+			setRefreshingIndex(null);
+		}
+	}, [refreshingIndex]);
+
 	if (isLoading) {
 		return (
 			<div className="min-h-screen bg-background p-4">
@@ -243,7 +286,13 @@ const App: React.FC = () => {
 									<span className="ml-2">Loading...</span>
 								</div>
 							) : (
-								<ResultList trackNo={texts} results={responses} />
+								<ResultList
+									trackNo={texts}
+									results={responses}
+									onRefresh={handleRefreshOne}
+									refreshingIndexes={refreshingIndex !== null ? new Set([refreshingIndex]) : undefined}
+									disabled={loading}
+								/>
 							)}
 						</CardContent>
 					</Card>

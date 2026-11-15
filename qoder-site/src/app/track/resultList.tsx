@@ -1,5 +1,7 @@
 'use client';
 import React, { useRef, useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Loader2, RefreshCw } from 'lucide-react';
 import { ParcelInfo, ParcelMap, TrackingResult } from '@/types/tracking';
 
 interface Props {
@@ -11,6 +13,12 @@ interface Props {
     parcels?: ParcelMap;
     /** 保存单个运单的包裹信息，返回是否成功 */
     onSaveParcel?: (code: string, parcel: ParcelInfo) => Promise<boolean>;
+    /** 单独刷新某一行运单的物流状态 */
+    onRefresh?: (index: number) => void;
+    /** 正在刷新中的行下标集合 */
+    refreshingIndexes?: Set<number>;
+    /** 批量查询进行中时禁用单条刷新 */
+    disabled?: boolean;
 }
 
 // 输入行首个空格/Tab 前是运单号，其余是附加说明
@@ -198,7 +206,7 @@ const ParcelBlock = ({code, parcel, onSaveParcel}: ParcelBlockProps) => {
     );
 };
 
-const ResultList = ({trackNo, results, errors, parcels, onSaveParcel}: Props) => {
+const ResultList = ({trackNo, results, errors, parcels, onSaveParcel, onRefresh, refreshingIndexes, disabled}: Props) => {
     return (
         <div className="space-y-3">
             {results.map((result, index) => {
@@ -247,6 +255,7 @@ const ResultList = ({trackNo, results, errors, parcels, onSaveParcel}: Props) =>
                     if (isDelivered || isInTransfer) {
                         itemTitle = itemTitle + ' / ' + JSON.stringify(result.data.wbInfo.expressCode);
                     }
+                    const isRefreshing = refreshingIndexes?.has(index) ?? false;
                     return (
                         <div 
                             className={`p-4 rounded-lg border bg-card text-card-foreground shadow-sm
@@ -256,12 +265,30 @@ const ResultList = ({trackNo, results, errors, parcels, onSaveParcel}: Props) =>
                             key={index}
                         >
                             <div className={`flex ${isDelivered || isInTransfer ? 'flex-col' : 'flex-row items-baseline space-x-2'} space-y-1`}>
-                                <div className="font-medium text-md text-muted-foreground">
-                                    {itemTitle}
+                                <div className="flex-1 min-w-0">
+                                    <div className="font-medium text-md text-muted-foreground">
+                                        {itemTitle}
+                                    </div>
+                                    <div className={`text-sm ${isDelivered ? 'text-destructive' : isInTransfer ? 'text-amber-600' : 'text-foreground'}`}>
+                                        {status.replace(/"/g, '')}
+                                    </div>
                                 </div>
-                                <div className={`text-sm ${isDelivered ? 'text-destructive' : isInTransfer ? 'text-amber-600' : 'text-foreground'}`}>
-                                    {status.replace(/"/g, '')}
-                                </div>
+                                {onRefresh && (
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="shrink-0 h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+                                        title="刷新此单号状态"
+                                        disabled={isRefreshing || disabled}
+                                        onClick={() => onRefresh(index)}
+                                    >
+                                        {isRefreshing ? (
+                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                        ) : (
+                                            <RefreshCw className="h-4 w-4" />
+                                        )}
+                                    </Button>
+                                )}
                             </div>
                             {code && (
                                 <ParcelBlock code={code} parcel={parcel} onSaveParcel={onSaveParcel} />
