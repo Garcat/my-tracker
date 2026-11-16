@@ -26,6 +26,36 @@ function wayBillCodeOf(line: string): string {
     return line.trim().split(/\s+/)[0] ?? '';
 }
 
+interface RefreshButtonProps {
+    index: number;
+    onRefresh?: (index: number) => void;
+    refreshingIndexes?: Set<number>;
+    disabled?: boolean;
+}
+
+// 单条刷新按钮：每条结果行共用，刷新中显示旋转图标
+const RefreshButton = ({ index, onRefresh, refreshingIndexes, disabled }: RefreshButtonProps) => {
+    if (!onRefresh) return null;
+    const isRefreshing = refreshingIndexes?.has(index) ?? false;
+    return (
+        <Button
+            variant="ghost"
+            size="sm"
+            className="shrink-0 -mt-1 -mr-1 h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
+            title="刷新此单号状态"
+            aria-label="刷新此单号状态"
+            disabled={isRefreshing || disabled}
+            onClick={() => onRefresh(index)}
+        >
+            {isRefreshing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+                <RefreshCw className="h-4 w-4" />
+            )}
+        </Button>
+    );
+};
+
 interface ParcelBlockProps {
     code: string;
     parcel: ParcelInfo | null;
@@ -225,21 +255,29 @@ const ResultList = ({trackNo, results, errors, parcels, onSaveParcel, onRefresh,
                             className="p-4 rounded-lg border bg-card text-card-foreground shadow-sm border-destructive/50 bg-destructive/5"
                             key={index}
                         >
-                            <div className="flex flex-col space-y-1">
-                                <div className="font-medium text-md text-muted-foreground">
-                                    {trackLabel}
-                                </div>
-                                <div className="text-sm text-destructive">
-                                    查询失败：{rowError}
-                                </div>
-                                {lastStatus && (
-                                    <div className="text-sm text-muted-foreground">
-                                        上次状态：{lastStatus}
+                            <div className="flex items-start gap-2">
+                                <div className="flex-1 min-w-0 space-y-1">
+                                    <div className="font-medium text-md text-muted-foreground">
+                                        {trackLabel}
                                     </div>
-                                )}
-                                {code && (
-                                    <ParcelBlock code={code} parcel={parcel} onSaveParcel={onSaveParcel} />
-                                )}
+                                    <div className="text-sm text-destructive">
+                                        查询失败：{rowError}
+                                    </div>
+                                    {lastStatus && (
+                                        <div className="text-sm text-muted-foreground">
+                                            上次状态：{lastStatus}
+                                        </div>
+                                    )}
+                                    {code && (
+                                        <ParcelBlock code={code} parcel={parcel} onSaveParcel={onSaveParcel} />
+                                    )}
+                                </div>
+                                <RefreshButton
+                                    index={index}
+                                    onRefresh={onRefresh}
+                                    refreshingIndexes={refreshingIndexes}
+                                    disabled={disabled}
+                                />
                             </div>
                         </div>
                     );
@@ -255,7 +293,6 @@ const ResultList = ({trackNo, results, errors, parcels, onSaveParcel, onRefresh,
                     if (isDelivered || isInTransfer) {
                         itemTitle = itemTitle + ' / ' + JSON.stringify(result.data.wbInfo.expressCode);
                     }
-                    const isRefreshing = refreshingIndexes?.has(index) ?? false;
                     return (
                         <div 
                             className={`p-4 rounded-lg border bg-card text-card-foreground shadow-sm
@@ -264,44 +301,48 @@ const ResultList = ({trackNo, results, errors, parcels, onSaveParcel, onRefresh,
                                   'border-border'}`} 
                             key={index}
                         >
-                            <div className={`flex ${isDelivered || isInTransfer ? 'flex-col' : 'flex-row items-baseline space-x-2'} space-y-1`}>
+                            <div className="flex items-start gap-2">
                                 <div className="flex-1 min-w-0">
-                                    <div className="font-medium text-md text-muted-foreground">
-                                        {itemTitle}
+                                    <div className={`flex ${isDelivered || isInTransfer ? 'flex-col' : 'flex-row items-baseline space-x-2'} space-y-1`}>
+                                        <div className="font-medium text-md text-muted-foreground">
+                                            {itemTitle}
+                                        </div>
+                                        <div className={`text-sm ${isDelivered ? 'text-destructive' : isInTransfer ? 'text-amber-600' : 'text-foreground'}`}>
+                                            {status.replace(/"/g, '')}
+                                        </div>
                                     </div>
-                                    <div className={`text-sm ${isDelivered ? 'text-destructive' : isInTransfer ? 'text-amber-600' : 'text-foreground'}`}>
-                                        {status.replace(/"/g, '')}
-                                    </div>
+                                    {code && (
+                                        <ParcelBlock code={code} parcel={parcel} onSaveParcel={onSaveParcel} />
+                                    )}
                                 </div>
                                 {onRefresh && (
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="shrink-0 h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-                                        title="刷新此单号状态"
-                                        disabled={isRefreshing || disabled}
-                                        onClick={() => onRefresh(index)}
-                                    >
-                                        {isRefreshing ? (
-                                            <Loader2 className="h-4 w-4 animate-spin" />
-                                        ) : (
-                                            <RefreshCw className="h-4 w-4" />
-                                        )}
-                                    </Button>
+                                    <RefreshButton
+                                        index={index}
+                                        onRefresh={onRefresh}
+                                        refreshingIndexes={refreshingIndexes}
+                                        disabled={disabled}
+                                    />
                                 )}
                             </div>
-                            {code && (
-                                <ParcelBlock code={code} parcel={parcel} onSaveParcel={onSaveParcel} />
-                            )}
                         </div>
                     );
                 } else if (result && result.result === false) {
                     return (
                         <div className="p-4 rounded-lg border bg-card text-card-foreground shadow-sm border-gray-300" key={index}>
-                            <div className="font-medium text-sm text-gray-300">{result.msg}</div>
-                            {code && (
-                                <ParcelBlock code={code} parcel={parcel} onSaveParcel={onSaveParcel} />
-                            )}
+                            <div className="flex items-start gap-2">
+                                <div className="flex-1 min-w-0">
+                                    <div className="font-medium text-sm text-gray-300">{result.msg}</div>
+                                    {code && (
+                                        <ParcelBlock code={code} parcel={parcel} onSaveParcel={onSaveParcel} />
+                                    )}
+                                </div>
+                                <RefreshButton
+                                    index={index}
+                                    onRefresh={onRefresh}
+                                    refreshingIndexes={refreshingIndexes}
+                                    disabled={disabled}
+                                />
+                            </div>
                         </div>
                     );
                 }
